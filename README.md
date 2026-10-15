@@ -19,6 +19,7 @@ F24 (MCU CAN device) 須另列專案與下載，不把型號當成角色或更�
 
 | 主題 | 原稿與同步腳本 |
 | --- | --- |
+| F13／F24 device Metadata／App IRQ 編輯與產生 | `docs/DEVICE_METADATA_VECTOR_WORKSHOP_zh-TW.md`；`sync_device_workshop.ps1`同步兩頁 `#device-metadata-vector-workshop` |
 | Tool→F24→F13 操作／驗證／decode 對照教學 | `docs/CAN_UPDATE_WALKTHROUGH_zh-TW.md` 的 `CAN_WALKTHROUGH` 區塊；`sync_can_update_walkthrough.ps1` 同步本頁 `#can-update-walkthrough` |
 | Flash／metadata每byte address／CAN格式與範例程式 | `docs/FLASH_METADATA_CAN_FRAME_GUIDE_zh-TW.md`；`sync_flash_reference.ps1`同步Bootloader頁，本頁連至該入口 |
 | 下載與六個操作／流程圖入口 | [Tool原稿](https://github.com/released/simple_renesas_isp_tool/blob/main/docs/MULTIBUS_TOOL_GUIDE_zh-TW.md)的`PUBLIC_RESOURCES`區塊；`sync_public_resources.ps1`同步兩頁，網站從`#downloads`開始 |
