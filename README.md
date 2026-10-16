@@ -1,54 +1,37 @@
 # RL78 ISP Tool 操作指南
 
 - 網頁入口：<https://released.github.io/slide_isp_tool_for_RL78/>
-- 可編輯內容：`index.md`；網頁載入入口：`index.html`。
-- 共用版型：`/notices_can/assets/style.css`、`app.js`、Markdown／Mermaid與側邊目錄。
-- 實際截圖與驗證要求：`SCREENSHOT_CHECKLIST.md`；不可用模型圖冒充操作證據。
+- 內容：`index.md`；載入入口：`index.html`。
+- 共用版型：`/notices_can/assets/style.css`、`app.js`。
+- 截圖資料：`SCREENSHOT_CHECKLIST.md`。
 
-本頁說明Host／Device識別、共用BIN／metadata／log、CAN更新、I2C探索，
-以及Misc透過UART更新Host App。公開導覽與介紹使用功能導向文字，
-不綁定Tool／firmware版號、交付階段或單次效能數字。精確版本與SHA-256
-由各交付套件說明提供；協定、metadata、IRQ ABI與硬體限制仍須明確保留。
+本頁包含 Tool 連線、共用 BIN／metadata／log、Custom Transfer、CAN device App 更新、I2C 探索及 Misc Host App 更新。
+公開導覽使用功能名稱；量測版本與雜湊由交付紀錄提供。
 
-現行CAN範例固定標示 F24 (MCU CAN host)、F13 (MCU CAN device)。後續
-F24 (MCU CAN device) 須另列專案與下載，不把型號當成角色或更新權限。
+## 主題維護
 
-## 共用內容維護
+原稿位於 [Tool docs](https://github.com/released/simple_renesas_isp_tool/tree/main/docs)。
+`scripts/web_guide_sections.json` 定義主題歸屬。
+同步後，完整章節只保留在所屬頁面，其他頁面使用跳轉連結。
 
-以下區塊由Tool專案的canonical MD同步，不直接修改網頁中的複本：
-
-| 主題 | 原稿與同步腳本 |
+| 本頁完整章節 | 原稿／同步腳本 |
 | --- | --- |
-| F13／F24 device Metadata／App IRQ 編輯與產生 | `docs/DEVICE_METADATA_VECTOR_WORKSHOP_zh-TW.md`；`sync_device_workshop.ps1`同步兩頁 `#device-metadata-vector-workshop` |
-| Tool→F24→F13 操作／驗證／decode 對照教學 | `docs/CAN_UPDATE_WALKTHROUGH_zh-TW.md` 的 `CAN_WALKTHROUGH` 區塊；`sync_can_update_walkthrough.ps1` 同步本頁 `#can-update-walkthrough` |
-| Flash／metadata每byte address／CAN格式與範例程式 | `docs/FLASH_METADATA_CAN_FRAME_GUIDE_zh-TW.md`；`sync_flash_reference.ps1`同步Bootloader頁，本頁連至該入口 |
-| 下載與六個操作／流程圖入口 | [Tool原稿](https://github.com/released/simple_renesas_isp_tool/blob/main/docs/MULTIBUS_TOOL_GUIDE_zh-TW.md)的`PUBLIC_RESOURCES`區塊；`sync_public_resources.ps1`同步兩頁，網站從`#downloads`開始 |
-| Boot/App移植入口 | `docs/RL78_BOOT_APP_PORTING_GUIDE_zh-TW.md`；`sync_rl78_porting_guide.ps1`同步Bootloader頁，本頁連至`#boot-app-porting` |
-| F13 Boot→App／ENTER／逾時 | `docs/F13_BOOT_UPDATE_FLOW_zh-TW.md`；`sync_f13_boot_decision.ps1` |
-| F24 App獨立IRQ產表 | `docs/SHARED_CONSOLE_BRIDGE_GUIDE_zh-TW.md`；`sync_f24_app_irq_guide.ps1` |
-| 共用metadata／跨介面防呆 | `docs/COMMON_IMAGE_METADATA.md`；`sync_common_image_policy.ps1` |
+| 下載與操作入口 | MULTIBUS_TOOL_GUIDE 的 PUBLIC_RESOURCES／sync_public_resources.ps1 |
+| Tool→MCU CAN host→MCU CAN device 逐層導讀 | CAN_UPDATE_WALKTHROUGH／sync_can_update_walkthrough.ps1 |
+| Host App 工程與向量設定 | SHARED_CONSOLE_BRIDGE_GUIDE 的 F24_APP_IRQ／sync_f24_app_irq_guide.ps1 |
+| 更新政策與通訊速度 | COMMON_IMAGE_METADATA／sync_common_image_policy.ps1 |
 
-同步後執行各腳本的`-CheckOnly`。功能變更須一併更新相關MD／PDF、操作步驟、
-支援／封鎖範圍與截圖清單；未驗證的UI或實板功能仍需清楚註記，不能因移除
-編輯狀態字樣而宣稱所有功能已完成。
+Device metadata／vector 編輯、各 device 工程、Boot decision、移植及逐 byte 參考集中於
+[MCU CAN device 頁](https://released.github.io/slide_boot_loader_for_RL78/)。
 
-同步腳本位於[Tool scripts](https://github.com/released/simple_renesas_isp_tool/tree/main/scripts)。
-透過`-WebRoot`或`FIRMWARE_WEB_ROOT`指定包含各網站checkout的父目錄；預設為Tool的父目錄。
-下載入口區分首次燒錄Boot與後續App BIN更新，不可互換Host／Device映像。
+修改原稿後執行同步及 `-CheckOnly`，同步相關 PDF。
+使用 `-WebRoot` 或 `FIRMWARE_WEB_ROOT` 指定網站 checkout 父目錄。
 
-## 本機預覽與檢查
+## 預覽與檢查
 
-在包含sibling資料夾的web根目錄啟動read-only HTTP server：
+以現有 HTTP server 預覽網站；renderer 使用 fetch，不採 file://。
+執行 `scripts/verify_local.ps1 -PreviewBase <local URL> -ToolRoot <Tool checkout>`
+檢查本機引用、章節連結、HTTP routes 與產品名稱，不綁定 build 版號。
+瀏覽器／DPI 外觀及硬體測試分別記錄。
 
-```powershell
-python -m http.server 18670 --bind 127.0.0.1
-```
-
-開啟`http://127.0.0.1:18670/slide_isp_tool_for_RL78/`。
-不可直接使用file://，renderer需要fetch；marked／Mermaid CDN需網路。
-
-`scripts/verify_local.ps1 -PreviewBase <local URL> -ToolRoot <Tool專案目錄>`
-檢查本機引用、HTTP routes、產品名稱、ISP入口超連結與通用導覽文字；
-刻意不要求網頁列出當前build版號。這些檢查不代替browser外觀、DPI或板測。
-
-截圖與log須先檢查個人路徑、序號及不必要資料；部署另依網站既有流程處理。
+截圖與 log 先檢查個人路徑、序號及不必要資料，再依網站既有流程部署。

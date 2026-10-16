@@ -52,17 +52,29 @@ $resourcePattern = '(?s)<!-- PUBLIC_RESOURCES_BEGIN -->.*?<!-- PUBLIC_RESOURCES_
 $ispBlocks = [regex]::Matches($ispText, $resourcePattern)
 $bootBlocks = [regex]::Matches($bootText, $resourcePattern)
 if ($ispBlocks.Count -ne 1 -or $bootBlocks.Count -ne 1 -or
-    $ispBlocks[0].Value.Replace("`r`n","`n") -cne $bootBlocks[0].Value.Replace("`r`n","`n")) {
-    throw 'Public download/workflow blocks are missing or differ.'
+    -not $bootBlocks[0].Value.Contains('https://released.github.io/slide_isp_tool_for_RL78/#downloads') -or
+    $bootBlocks[0].Value.Contains('raw.githubusercontent')) {
+    throw 'Expected full downloads on ISP and a navigation link on Bootloader.'
 }
-foreach ($anchor in @('tool-bridge-flow','f13-boot-flow','tool-operation','host-bridge-firmware','f13-device-update')) {
-    if ([regex]::Matches($ispText, '<a id="' + $anchor + '"></a>').Count -ne 1 -or
-        -not $ispBlocks[0].Value.Contains('https://released.github.io/slide_isp_tool_for_RL78/#' + $anchor)) {
+foreach ($anchor in @('tool-bridge-flow','tool-operation','custom-transfer','host-bridge-firmware','f13-device-update','mcu-can-device')) {
+    if ([regex]::Matches($ispText, '<a id="' + $anchor + '"></a>').Count -ne 1) {
         throw "Missing/duplicate public workflow anchor: $anchor"
     }
 }
-if ([regex]::Matches($bootText, '<a id="boot-app-porting"></a>').Count -ne 1) {
-    throw 'Missing/duplicate public porting anchor.'
+foreach ($anchor in @('boot-app-porting','f13-boot-decision','f24-can-device','device-metadata-vector-workshop','device-app-irq','device-app-build')) {
+    if ([regex]::Matches($bootText, '<a id="' + $anchor + '"></a>').Count -ne 1) {
+        throw "Missing/duplicate device anchor: $anchor"
+    }
+}
+$pages = @{'slide_isp_tool_for_RL78'=$ispText;'slide_boot_loader_for_RL78'=$bootText}
+foreach ($text in $pages.Values) {
+    foreach ($match in [regex]::Matches($text,'https://released\.github\.io/(slide_(?:isp_tool|boot_loader)_for_RL78)/#([A-Za-z0-9_-]+)')) {
+        $site=$match.Groups[1].Value
+        $anchor=$match.Groups[2].Value
+        if ([regex]::Matches($pages[$site],'<a id="'+[regex]::Escape($anchor)+'"></a>').Count -ne 1) {
+            throw "Broken/duplicate cross-page anchor: $site / $anchor"
+        }
+    }
 }
 foreach ($download in @('simple_renesas_isp_tool/main/build/FirmwareUpgradeTool.exe',
     'simple_renesas_isp_tool/main/firmware/RL78_F24_Bridge_boot/DefaultBuild/RL78_F24_Bridge_boot.mot',
@@ -74,7 +86,7 @@ foreach ($download in @('simple_renesas_isp_tool/main/build/FirmwareUpgradeTool.
         throw "Missing public download: $download"
     }
 }
-Write-Host 'PASS: six workflow anchors, six download URLs and matching public resource blocks.'
+Write-Host 'PASS: workflow anchors, six downloads and single-owner resource navigation.'
 $flashPattern = '(?s)<!-- FLASH_REFERENCE_BEGIN -->.*?<!-- FLASH_REFERENCE_END -->'
 $flashBlocks = [regex]::Matches($bootText, $flashPattern)
 if ($flashBlocks.Count -ne 1 -or
