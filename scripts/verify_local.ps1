@@ -113,6 +113,8 @@ if ($ToolRoot) {
         throw 'Tool/web product identity missing.'
     }
     Write-Host 'PASS: Tool/web product identity; public guide intentionally has no build-version pin.'
+    & (Join-Path $ToolRoot 'scripts\sync_public_content_guidelines.ps1') -WebRoot $webRoot -CheckOnly
+    & (Join-Path $ToolRoot 'scripts\verify_public_content.ps1') -WebRoot $webRoot
 }
 if ($PreviewBase) {
     $routes = @('/slide_isp_tool_for_RL78/', '/slide_isp_tool_for_RL78/index.md',

@@ -10,6 +10,10 @@
 
 ## 主題維護
 
+編寫與驗收依據為 [公開文件編寫準則](PUBLIC_CONTENT_GUIDELINES_zh-TW.md)。
+共用原稿位於 `/web` 根目錄，適用目前與未來各類 slide；此處為獨立 repository 的同步副本。
+規範同步由 `/web/scripts/sync_public_content_guidelines.ps1` 維護，並可使用 `-CheckOnly` 檢查。
+
 原稿位於 [Tool docs](https://github.com/released/simple_renesas_isp_tool/tree/main/docs)。
 `scripts/web_guide_sections.json` 定義主題歸屬。
 同步後，完整章節只保留在所屬頁面，其他頁面使用跳轉連結。
