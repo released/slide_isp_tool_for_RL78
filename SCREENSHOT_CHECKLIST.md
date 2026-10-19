@@ -24,7 +24,8 @@ version/size、log/trace、日期與PASS/FAIL。100%/125% DPI及Debug startup as
 | 13_updated_app.png | 重新探索/上電、新版/UART marker；非舊cache | Device ready後補 |
 | 14_i2c_read_only.png | reported constants、09/100k、redBLOCKED | 待板測 |
 | 15_i2c_upgrade.png | 安全erase/write/read-back/recovery | 未開放，待slave修正 |
-| 16_shared_console_tabs.png | TAB只在左INTERFACE SETTINGS；中SHARED IMAGE / METADATA與右SHARED LOG不在TAB內；同一BIN／metadata／log，切換無殘影，100%／125% DPI | 待擷取 |
+| 16_shared_console_tabs.png | 五個系統灰白群組、加粗邊框；TAB只在左下；上方20欄metadata及中下更新、右下Log獨立；1366×768、100%／125% DPI、切換無殘影 | 待擷取 |
+| log_auto_scroll.png | 預設勾選、INI重開記憶；關閉後追加大量訊息，視窗位置及選取文字不變；再勾選回到底部 | 待實際操作擷取；原生RichEdit測試另記 |
 | 17_misc_bridge_info.png | HOST BRIDGE目的地、host boot/app descriptor、BUR1與live layout匹配；舊host封鎖 | 待實板安裝 |
 | 18_misc_host_update.png | 明確HOST APP確認、更新後留boot、另按RUN、重連確認版本；附授權及原log | 待實板驗證 |
 | 19_metadata_pages.png | READ／STAGE各四段64 bytes、256組合／CRC、BEGIN前取消零擦寫；Host128／frame142 | 待實板trace |
