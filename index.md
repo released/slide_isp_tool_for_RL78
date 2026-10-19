@@ -30,8 +30,8 @@ F24 (MCU CAN host) 使用獨立的 Bridge Boot／App，透過 Misc／UART 更新
 | --- | --- | --- |
 | PC Tool | [Windows EXE](https://raw.githubusercontent.com/released/simple_renesas_isp_tool/main/build/FirmwareUpgradeTool.exe)／[完整原始碼](https://github.com/released/simple_renesas_isp_tool) | Windows x64；先安裝實際VCOM所需driver，再選COM並Probe Host |
 | F24 (MCU CAN host) Boot | [Boot專案](https://github.com/released/simple_renesas_isp_tool/tree/main/firmware/RL78_F24_Bridge_boot)／[Boot MOT](https://raw.githubusercontent.com/released/simple_renesas_isp_tool/main/firmware/RL78_F24_Bridge_boot/DefaultBuild/RL78_F24_Bridge_boot.mot) | 首次以燒錄器安裝；Misc不更新Boot |
-| F24 (MCU CAN host) App | [App專案](https://github.com/released/simple_renesas_isp_tool/tree/main/firmware/RL78_F24_Bridge_app)／[Host App BIN](https://raw.githubusercontent.com/released/simple_renesas_isp_tool/main/firmware/RL78_F24_Bridge_app/DefaultBuild/RL78_F24_Bridge_app_bridge_update.bin) | Misc／UART115200；完成後明確Run Validated Bridge App |
-| F13 (MCU CAN device) Boot | [Boot專案](https://github.com/released/RL78_F13_Boot_loader_CAN)／[Boot HEX](https://raw.githubusercontent.com/released/RL78_F13_Boot_loader_CAN/main/DefaultBuild/boot0000_1FFF.hex) | 燒錄器初裝 Boot／App |
+| F24 (MCU CAN host) App | [App專案](https://github.com/released/simple_renesas_isp_tool/tree/main/firmware/RL78_F24_Bridge_app)／[Misc 更新 BIN](https://raw.githubusercontent.com/released/simple_renesas_isp_tool/main/firmware/RL78_F24_Bridge_app/DefaultBuild/RL78_F24_Bridge_app_bridge_update.bin)／[燒錄器初裝 App MOT](https://raw.githubusercontent.com/released/simple_renesas_isp_tool/main/firmware/RL78_F24_Bridge_app/DefaultBuild/RL78_F24_Bridge_app_flash.mot) | Misc 載入 `_bridge_update.bin`，使用 UART115200；`_flash.mot` 搭配 Boot MOT 供燒錄器初裝 |
+| F13 (MCU CAN device) Boot | [Boot專案](https://github.com/released/RL78_F13_Boot_loader_CAN)／[Boot 專用 HEX](https://raw.githubusercontent.com/released/RL78_F13_Boot_loader_CAN/main/DefaultBuild/boot0000_1FFF.hex) | 燒錄器安裝／重燒 Boot；範圍為 `0x0000..0x1FFF`，不包含 App |
 | F13 (MCU CAN device) App | [App專案](https://github.com/released/RL78_F13_Boot_loader_CAN_app)／[初裝合併HEX](https://raw.githubusercontent.com/released/RL78_F13_Boot_loader_CAN_app/main/boot_app.hex)／[CAN更新BIN](https://raw.githubusercontent.com/released/RL78_F13_Boot_loader_CAN_app/main/DefaultBuild/RL78_F13_Boot_loader_CAN_app_update.bin) | 合併HEX供燒錄器初裝；CAN TAB載入_update.bin更新Device App |
 | F13 (MCU CAN device) 通訊測試 | [Transfer範例](https://github.com/released/RL78_F13_CAN_Transfer) | Custom Transfer，不擦寫Flash；不是Boot/App更新映像 |
 | F24 (MCU CAN device) Boot／App | [工程配置與建置說明](https://released.github.io/slide_boot_loader_for_RL78/#f24-can-device) | 燒錄器初裝 Boot HEX／App flash HEX；CAN 更新使用 App update BIN |
@@ -40,6 +40,23 @@ F24 (MCU CAN host) 使用獨立的 Bridge Boot／App，透過 Misc／UART 更新
 F24 host firmware 使用完整 Tool repository，包含 firmware 共用來源與 scripts。
 F13 Boot與App需以原repository名稱放在同一父目錄，App會引用相鄰Boot；Download ZIP
 解壓後請移除-main尾碼。先build Boot，再build App；版本、metadata、IRQ ABI與CRC仍須相容。
+
+### 交付檔與安裝範圍
+
+Boot 使用燒錄器安裝；日常 App 更新才在 Tool 載入 BIN。
+F24 host 的 `_bridge_update.bin` 用於 Misc；F13 device 的 `_update.bin` 用於 CAN。
+F24 host 更新寫入完成後，按 `Run Validated Bridge App` 啟動並重新確認 Host App。
+
+HEX（Intel HEX）與 MOT（Motorola S-record）含位址記錄；BIN 為連續映像資料，Tool 依 metadata 與 live Boot 契約核對目的地。
+副檔名不能互換，檔案的文字大小也不等於 Flash 程式大小。
+
+F13 App 根目錄 `boot_app.hex` 包含 Boot、App 與剩餘區域的 `0xFF`，供燒錄器整體初裝。
+同目錄 `boot_app.bin` 內容相同，僅供需要 raw binary 的燒錄方式使用，起點為 `0x0000`；它不是 CAN 更新 BIN。
+僅更新 App 時使用上表的更新 BIN，不使用合併映像。
+
+F24 App 原始 `.mot` 與 F13 原始專案 `.hex` 是編譯／封裝輸入。
+正式安裝使用已加入 metadata／CRC 的 `_flash.mot`、`flash_app_variable_CRC.hex` 或配套合併 HEX；日常更新使用對應的更新 BIN。
+以燒錄器重燒 Boot／App 前，核對實際 MCU、檔案位址及 erase 設定；分區映像不代表燒錄器一定採分區擦除。
 
 原始碼維護可使用 Tool 根目錄的 `github_push.bat`，同步 F13 Boot／App 與 Tool（含 F24 MCU CAN host）。
 保留檔清單、本機 `tmp` 排除、確認與恢復方式見 [GitHub 原始碼與交付檔同步](https://github.com/released/simple_renesas_isp_tool/blob/main/docs/GITHUB_PUBLISH_zh-TW.md)。
@@ -80,6 +97,21 @@ Flash mapping、metadata全部256個byte的address／範例值、產生與解析
 
 `Reset Host` 重新啟動 host；`Disconnect` 結束 bus／target 連線；`Close COM` 結束 UART 連線並取消工作。
 COM friendly name 用於選擇介面，MCU 身分由 Probe 回覆取得。
+
+<!-- TOOL_CONNECT_MEDIA_BEGIN -->
+<a id="tool-connect-example"></a>
+
+### COM 連線操作圖
+
+選擇 COM 與 Host Baud 後按 `Open + Probe Host`，核對 `HOST BRIDGE | VERIFIED LINK` 與實際 MCU。
+下圖的 COM 已驗證，但 Misc 仍保留 Device CAN BIN，因此出現 `INVALID - HOST APP required`；連線成功與選檔相容是兩項獨立判斷。
+進行更新前，依[下載與操作總覽](https://released.github.io/slide_isp_tool_for_RL78/#downloads)載入對應目的地的 App BIN。
+
+圖中的版本、COM 與大小是操作範例；本機檔案與報告路徑已遮蔽，狀態與操作結果保留。
+網頁上的操作圖可點選開啟原尺寸，方便查看欄位與訊息。
+
+[![COM 連線成功與映像目的地分別核對](images/tool_operation/tool_connect_COM.jpg)](images/tool_operation/tool_connect_COM.jpg)
+<!-- TOOL_CONNECT_MEDIA_END -->
 
 ### 五張資訊卡
 
@@ -167,35 +199,86 @@ F13 範例回覆為 ID `0x711`、`5A 01 01 01 00 01 00 8D`。
 F13、F24 device 各自提供獨立的 Boot／App 工程。
 Tool 使用同一組 CAN Upgrade 操作，依實際 BIN 與 live device 的 metadata 核對 MCU 與更新條件。
 
-1. 在 CAN 頁選擇 CAN Upgrade、Bridge port 與對應 bitrate。
-2. `Load Update Image` 載入該 device 的 `*_update.bin`。
-3. 核對 MCU、版本、Metadata VALID 與 CRC MATCH。
-4. `Discover Target` 取得 live device 的模式、Boot 與 App 資訊；Boot 與支援協定的 App 都可探索。
-5. 若回報 App 模式，按 `Enter Boot`；若已在 Boot，則略過此步。
-6. Prerequisite 顯示 Ready 後，按 `Start Device Update` 並確認目的地。
-7. END 通過後等待 Tool 自動確認 APP_READY 與 live INFO，再停止 Host CAN，保留 COM，顯示完成對話框與 `[COMPLETE]`。
-
-未確認時，Tool 保留「已寫入／App 未確認」結果，不自動重寫。
-
-完成後可檢查 App code 與板上功能。再次更新時重新 Discover；各模式的操作與 CAN 停止警告見 [完成提示與下一步](#update-completion)。
-
 BIN size 包含尾端 CRC，capacity 則為可用 App 區域。
 App Start 使用 BIN metadata；手動 override 作為額外核對值。
 
+<!-- TOOL_DEVICE_MEDIA_BEGIN -->
+<a id="device-update-example"></a>
+
+### Device App 更新操作圖
+
+先完成 Host Probe，在 CAN 頁選取 `CAN Upgrade`、Bridge port 與 device 使用的 bitrate。
+以下圖片使用 F13 (MCU CAN device)，各欄數值來自所載入 BIN 與 live device；操作順序依回報模式選擇。
+完整[欄位與狀態判讀](https://released.github.io/slide_isp_tool_for_RL78/#tool-ui-fields)集中於 Tool operation。
+
+#### 1. 載入 Device App BIN
+
+`Load Update Image` 選取 `RL78_F13_Boot_loader_CAN_app_update.bin`，核對 MCU、App version、Metadata VALID 與 CRC MATCH。
+此時尚未 Discover，LIVE 資訊為 N/A；離線驗證通過不代表已與 device 連線。
+
+[![CAN 載入 Device App BIN 並核對離線 metadata](images/tool_operation/tool_CAN_update1_load_image.jpg)](images/tool_operation/tool_CAN_update1_load_image.jpg)
+
+#### 2. Discover Target
+
+`Discover Target` 讀取目前模式、Boot 與 installed App 資訊。
+圖中為 `APPLICATION MODE`，下一步是 Enter Boot；若回報 `BOOTLOADER MODE`，直接進入步驟 4。
+
+[![Discover Target 回報正在執行的 Device App](images/tool_operation/tool_CAN_update2_discover_target.jpg)](images/tool_operation/tool_CAN_update2_discover_target.jpg)
+
+#### 3. Enter Boot 與操作等待時間
+
+按 `Enter Boot`，等 DEVICE TARGET 回報 `BOOTLOADER MODE` 與 prerequisite 的 Ready。
+
+F13 Boot 在**原 App 有效、ENTER 後尚未接受 START**時，若連續約 **30 秒沒有符合接收條件的 CAN request**，會返回原 App。
+這是 inactivity 計時，不是 ENTER 後固定等待 30 秒；符合條件的 INFO 等 request 也會刷新計時。
+在確認視窗停留過久，裝置也可能已返回 App，無法直接開始更新。
+
+此時重新 `Discover Target`；若為 App 模式，再 `Enter Boot`，確認目前仍在 Boot 後執行 `Start Device Update`。
+畫面先前取得的 Boot 資訊不是持續連線保證。
+原 App 無效、START 已接受或錯誤處理後的行為，見 [Boot 逾時與更新狀態](https://released.github.io/slide_boot_loader_for_RL78/#f13-boot-decision)，不沿用此「返回原 App」條件。
+
+[![Enter Boot 成功後確認 Boot 模式及 Ready](images/tool_operation/tool_CAN_update3_enter_boot.jpg)](images/tool_operation/tool_CAN_update3_enter_boot.jpg)
+
+#### 4. 確認並開始更新
+
+按 `Start Device Update`，核對確認視窗的 MCU、檔案、版本、size、CRC 與改寫範圍，再確認寫入。
+若出現狀態已改變、Boot 未就緒或 timeout，依步驟 3 重新取得目前模式，再確認更新條件。
+Tool 在真正更新前會重新讀取模式；`Device is no longer in Boot; update not started.` 表示沒有開始更新，需重新 Discover／Enter Boot。
+
+[![Device 更新前核對映像與 Flash 範圍](images/tool_operation/tool_CAN_update4_start_update.jpg)](images/tool_operation/tool_CAN_update4_start_update.jpg)
+
+#### 5. 更新進行中
+
+觀察階段、progress 與 Log。保持供電及 CAN 連線；`Cancel` 取消目前工作，`Close COM` 會取消並結束連線。
+START 已接受後失聯不會沿用步驟 3 的自動返回原 App 行為；取消、錯誤與不完整映像的處理見 Boot 狀態章節。
+
+[![Device App 分階段更新與進度](images/tool_operation/tool_CAN_update5_during_update.jpg)](images/tool_operation/tool_CAN_update5_during_update.jpg)
+
+#### 6. 更新完成與 App 確認
+
+只有 END／CRC 通過、APP_READY 與 live INFO 核對完成後，才顯示 `[COMPLETE]` 與 Device App update complete。
+正常完成會停止 Host CAN、保留 COM（Host UART），讓使用者檢查 App 與板上功能；因此 DEVICE TARGET 回到 N/A 並要求再次 Discover 是完成清理後的狀態。
+App 未確認或 CAN STOP 未確認時，依[完成提示與下一步](https://released.github.io/slide_isp_tool_for_RL78/#update-completion)處理，不自動重寫。
+
+[![Device 更新完成並確認 App 後停止 CAN 保留 COM](images/tool_operation/tool_CAN_update6_after_update.jpg)](images/tool_operation/tool_CAN_update6_after_update.jpg)
+
 ```mermaid
 flowchart TD
-    LOAD["載入 MCU CAN device App BIN"] --> FILE["核對 metadata / CRC"]
-    FILE --> DISCOVER["讀取 live device 資訊"]
+    LOAD["載入 Device App BIN<br/>核對 metadata / CRC"] --> DISCOVER["Discover Target / live 資訊"]
     DISCOVER --> MATCH{"MCU / 分區 / 更新政策符合？"}
     MATCH -->|否| STOP["BLOCKED / 顯示原因"]
     MATCH -->|是| MODE{"目前為 App 模式？"}
-    MODE -->|是| ENTER["Enter Boot"]
-    MODE -->|否，已在 Boot| UPDATE["Start Device Update"]
-    ENTER --> UPDATE
-    UPDATE --> END["END 驗證 / reset"]
+    MODE -->|是| ENTER["Enter Boot / 確認 Boot Ready"]
+    MODE -->|已在 Boot| UPDATE["Start Device Update / 接受 START"]
+    ENTER --> WAIT{"START 接受前的狀態"}
+    WAIT -->|仍在 Boot / 確認寫入| UPDATE
+    WAIT -->|原 App 有效 / inactivity 到期| RETURN["返回原 App<br/>重新 Discover，再 Enter Boot"]
+    RETURN --> DISCOVER
+    UPDATE --> END["Transfer / END 驗證 / reset"]
     END --> APP["確認 APP_READY 與 live INFO"]
-    APP --> DONE["停止 Host CAN / 保留 COM<br/>顯示完成或停止警告；檢查 App"]
+    APP --> DONE["停止 Host CAN / 保留 COM<br/>顯示完成或停止警告"]
 ```
+<!-- TOOL_DEVICE_MEDIA_END -->
 
 <a id="can-upgrade-performance"></a>
 
@@ -590,14 +673,69 @@ flowchart TD
 
 ### Host 初次安裝
 
-| 來源 | 用途 |
-| --- | --- |
-| `RL78_F24_Bridge_boot/DefaultBuild/*.mot` | 燒錄器初裝 Boot |
-| `RL78_F24_Bridge_app/DefaultBuild/*_flash.mot` | 燒錄器初裝 App |
-| `*_bridge_update.bin` | Misc 更新 Host App |
+Boot 專用 MOT、燒錄器 App `_flash.mot` 與 Misc `_bridge_update.bin` 的檔名及下載集中於[交付檔與安裝範圍](#downloads)。
+可先以燒錄器安裝 Boot，再透過 Misc 更新 App；或以燒錄器安裝配套 Boot 與 App MOT。
 
 Host Boot 預留20 KiB，App 起點0x5000，最後1 KiB保留。
 Host Boot 保持固定UART115200；一般 Host Link 連線速度見 [更新政策與通訊速度](#image-update-policy)。
+
+<!-- TOOL_BRIDGE_MEDIA_BEGIN -->
+<a id="bridge-update-example"></a>
+
+### Host App 更新操作圖
+
+以下使用 F24 (MCU CAN host)。Misc 更新的是 PC 所連接 host 自身的 App，固定以 UART115200 操作。
+初裝 Boot MOT、燒錄器 App MOT 與 Misc BIN 的選用，見[下載與操作總覽](https://released.github.io/slide_isp_tool_for_RL78/#downloads)。
+
+#### 1. 載入 Host App BIN
+
+選取 Misc，載入 `RL78_F24_Bridge_app_bridge_update.bin`。
+核對目的地為 HOST BRIDGE、MCU、metadata、CRC MATCH 與 UART115200；Device App BIN 會因目的地不符而被拒絕。
+
+[![Misc 載入 Host App BIN 並核對目的地](images/tool_operation/tool_Bridge_update1_load_image.jpg)](images/tool_operation/tool_Bridge_update1_load_image.jpg)
+
+#### 2. 確認 Enter Bridge Boot
+
+按 `Read Bridge Update Info` 取得目前資訊，再按 `Enter Bridge Boot (UART)`。
+確認視窗列出的 HOST BRIDGE、COM 與 MCU；此步進入 Boot，不擦寫 App。
+
+[![確認將 Host App 切換到 Bridge Boot](images/tool_operation/tool_Bridge_update2_enter_boot.jpg)](images/tool_operation/tool_Bridge_update2_enter_boot.jpg)
+
+#### 3. 確認 Host Boot 已連線
+
+等 Tool 以同一 COM／115200 重新 Probe。
+目的地回報 `HOST BRIDGE - BOOT mode`，且 prerequisite 為 Ready 後，才可更新。
+
+[![重新連線確認 Host Boot 模式與更新條件](images/tool_operation/tool_Bridge_update3_enter_boot.jpg)](images/tool_operation/tool_Bridge_update3_enter_boot.jpg)
+
+#### 4. 確認並寫入 Host App
+
+按 `Update HOST APP`，核對檔案、MCU、App start 與 size，確認後開始寫入。
+保持 UART 與供電；Boot／option／保留區不在 Misc App 寫入範圍。
+
+[![確認 Host App 更新範圍及 UART 寫入](images/tool_operation/tool_Bridge_update4_start_update.jpg)](images/tool_operation/tool_Bridge_update4_start_update.jpg)
+
+#### 5. 寫入完成，仍停留 Boot
+
+`Host App update complete - RUN required` 表示映像寫入、CRC 與 metadata readback 通過，**還沒有啟動 App**。
+下一步是明確執行 RUN，不需再次燒錄。
+
+[![Host App 寫入完成但尚待 RUN](images/tool_operation/tool_Bridge_update5_after_update.jpg)](images/tool_operation/tool_Bridge_update5_after_update.jpg)
+
+#### 6. Run Validated Bridge App
+
+按 `Run Validated Bridge App`，核對 HOST BRIDGE 目的地後確認。
+
+[![確認執行已驗證的 Host App](images/tool_operation/tool_Bridge_update6_run_valid.jpg)](images/tool_operation/tool_Bridge_update6_run_valid.jpg)
+
+#### 7. Host App 啟動確認
+
+Tool 自動重連同一 COM，重新讀取並核對已安裝 App 資訊。
+`Host App startup confirmed` 與 `[COMPLETE] Host App is running` 表示此階段完成；之後可選擇 CAN 等 device 介面。
+若 Log 的 counter 顯示 unavailable，代表該次重啟前後無可比對的 snapshot，不等於此處的 App 更新失敗。
+
+[![RUN 後自動重連並確認 Host App](images/tool_operation/tool_Bridge_update7_update_finish.jpg)](images/tool_operation/tool_Bridge_update7_update_finish.jpg)
+<!-- TOOL_BRIDGE_MEDIA_END -->
 
 ### Recovery 入口
 

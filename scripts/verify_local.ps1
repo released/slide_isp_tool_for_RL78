@@ -95,6 +95,7 @@ foreach ($text in $pages.Values) {
 foreach ($download in @('simple_renesas_isp_tool/main/build/FirmwareUpgradeTool.exe',
     'simple_renesas_isp_tool/main/firmware/RL78_F24_Bridge_boot/DefaultBuild/RL78_F24_Bridge_boot.mot',
     'simple_renesas_isp_tool/main/firmware/RL78_F24_Bridge_app/DefaultBuild/RL78_F24_Bridge_app_bridge_update.bin',
+    'simple_renesas_isp_tool/main/firmware/RL78_F24_Bridge_app/DefaultBuild/RL78_F24_Bridge_app_flash.mot',
     'RL78_F13_Boot_loader_CAN/main/DefaultBuild/boot0000_1FFF.hex',
     'RL78_F13_Boot_loader_CAN_app/main/boot_app.hex',
     'RL78_F13_Boot_loader_CAN_app/main/DefaultBuild/RL78_F13_Boot_loader_CAN_app_update.bin')) {
@@ -102,7 +103,7 @@ foreach ($download in @('simple_renesas_isp_tool/main/build/FirmwareUpgradeTool.
         throw "Missing public download: $download"
     }
 }
-Write-Host 'PASS: workflow anchors, six downloads and single-owner resource navigation.'
+Write-Host 'PASS: workflow anchors, seven downloads and single-owner resource navigation.'
 $flashPattern = '(?s)<!-- FLASH_REFERENCE_BEGIN -->.*?<!-- FLASH_REFERENCE_END -->'
 $flashBlocks = [regex]::Matches($bootText, $flashPattern)
 if ($flashBlocks.Count -ne 1 -or

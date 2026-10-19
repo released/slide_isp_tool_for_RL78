@@ -23,12 +23,15 @@
 | 下載與操作入口 | MULTIBUS_TOOL_GUIDE 的 PUBLIC_RESOURCES／sync_public_resources.ps1 |
 | Tool→MCU CAN host→MCU CAN device 逐層導讀 | CAN_UPDATE_WALKTHROUGH／sync_can_update_walkthrough.ps1 |
 | Host App 工程與向量設定 | SHARED_CONSOLE_BRIDGE_GUIDE 的 F24_APP_IRQ／sync_f24_app_irq_guide.ps1 |
+| COM／Device App／Host App 操作圖 | SHARED_CONSOLE_BRIDGE_GUIDE 的 TOOL_*_MEDIA／sync_tool_operation_media.ps1 |
 | 更新政策與通訊速度 | COMMON_IMAGE_METADATA／sync_common_image_policy.ps1 |
 
 Device metadata／vector 編輯、各 device 工程、Boot decision、移植及逐 byte 參考集中於
 [MCU CAN device 頁](https://released.github.io/slide_boot_loader_for_RL78/)。
 
 修改原稿後執行同步及 `-CheckOnly`，同步相關 PDF。
+操作圖原稿位於 Tool 的 `docs/images/tool_operation`；同步腳本同時核對三段說明與14張公開副本的 SHA-256。
+頁面只使用遮蔽本機路徑的副本；圖片可點選開啟原尺寸。
 使用 `-WebRoot` 或 `FIRMWARE_WEB_ROOT` 指定網站 checkout 父目錄。
 
 ## 預覽與檢查
