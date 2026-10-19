@@ -31,9 +31,25 @@ sync_tool_operation_media.ps1 同步三段 TOOL_*_MEDIA 與公開圖；-CheckOnl
 既有 [PCAN benchmark](img/benchmark_pcan.jpg) 與 [MCU TRACE](img/benchmark_mcu_log.jpg)
 屬於 Custom Transfer 通訊範例，與 App 更新操作圖分開使用。
 
+## Custom Transfer：F24 MCU CAN device
+
+四張操作圖集中於 [Custom Transfer 範例](https://released.github.io/slide_isp_tool_for_RL78/#f24-custom-transfer-example)，與 App 更新操作圖分開使用。
+
+| 公開圖 | 可觀察內容 |
+| --- | --- |
+| [CAN_custom_transfer_1.png](images/custom_transfer/CAN_custom_transfer_1.png) | Tool 選擇 Custom Transfer、device 尚未探索 |
+| [CAN_custom_transfer_mcu_log_1.png](images/custom_transfer/CAN_custom_transfer_mcu_log_1.png) | DEVICE_INFO sequence 1..7、target／part prefix／CRC |
+| [CAN_custom_transfer_2.png](images/custom_transfer/CAN_custom_transfer_2.png) | Live F24 device 身分、Transfer Test 成功及 host／device counters |
+| [CAN_custom_transfer_mcu_log_2.png](images/custom_transfer/CAN_custom_transfer_mcu_log_2.png) | PING／ECHO／PATTERN／GET_STATS sequence 8..22 |
+
+原稿為 MULTIBUS_TOOL_GUIDE 的 CUSTOM_TRANSFER_MEDIA；sync_custom_transfer_media.ps1 同步公開副本。
+原圖保留於 Tool 的忽略區域，不隨公開圖片上傳；畫面中的 F13 BIN 是未參與此測試的 OFFLINE 資料。
+這組紀錄僅涵蓋正常通訊；CAN 波形、故障注入、恢復及 Flash 更新分別驗證。
+
 ## 另外擷取／驗證的情境
 
-這14張圖不代表下列情境已完成驗證；擷取時一併記錄設定、BIN、log／trace 與結果。
+16 張操作圖包含 F13 更新步驟，以及 F24 device 的 PASS 報告與更新後 App counter。
+正常 CAN App 更新已確認；下列專項情境另外記錄設定、BIN、log／trace 與結果。
 
 | 情境 | 應核對內容 | 狀態 |
 | --- | --- | --- |
@@ -47,3 +63,13 @@ sync_tool_operation_media.ps1 同步三段 TOOL_*_MEDIA 與公開圖；-CheckOnl
 | I2C 探索 | 指定 port／address、回報來源、唯讀／BLOCKED 邊界 | 尚需專項畫面 |
 
 一般截圖不觸發未授權的 erase／write；進度100%與App健康／功能驗證分別記錄。
+
+## F24 MCU CAN device：更新完成與執行紀錄
+
+| 公開圖 | 可觀察內容 |
+| --- | --- |
+| [firmware_update_report.png](images/tool_operation/firmware_update_report.png) | CAN device update PASS、CRC、App 啟動確認、Host COM 保留 |
+| [MCU_F24_Device_app_log.png](images/tool_operation/MCU_F24_Device_app_log.png) | boot-validated、CAN update completed、V1 counter 從 0 遞增 |
+
+完整說明集中於 [F24 device 更新結果](https://released.github.io/slide_isp_tool_for_RL78/#f24-device-update-example)。
+兩張原圖無本機路徑；公開 PNG 保留全部解碼像素並移除圖片 metadata，原始 JPEG 保存在忽略的私有目錄。

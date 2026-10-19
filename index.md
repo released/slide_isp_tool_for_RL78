@@ -58,7 +58,7 @@ F24 App 原始 `.mot` 與 F13 原始專案 `.hex` 是編譯／封裝輸入。
 正式安裝使用已加入 metadata／CRC 的 `_flash.mot`、`flash_app_variable_CRC.hex` 或配套合併 HEX；日常更新使用對應的更新 BIN。
 以燒錄器重燒 Boot／App 前，核對實際 MCU、檔案位址及 erase 設定；分區映像不代表燒錄器一定採分區擦除。
 
-原始碼維護可使用 Tool 根目錄的 `github_push.bat`，同步 F13 Boot／App 與 Tool（含 F24 MCU CAN host）。
+原始碼維護可使用 Tool 根目錄的 `github_push.bat`，同步 F13 Boot／App、F24 device Transfer／Boot／App 與 Tool（含 F24 MCU CAN host）。
 保留檔清單、本機 `tmp` 排除、確認與恢復方式見 [GitHub 原始碼與交付檔同步](https://github.com/released/simple_renesas_isp_tool/blob/main/docs/GITHUB_PUBLISH_zh-TW.md)。
 
 ### 操作與工程入口
@@ -180,6 +180,44 @@ Custom Transfer 搭配 device 的獨立 Transfer 工程。
 Request 使用 standard `0x710`，response 使用 `0x711`，DLC8。
 Payload Byte7 為 CRC-8/ATM。
 
+<!-- TRANSFER_DIAGNOSTICS_BEGIN -->
+<a id="transfer-diagnostics"></a>
+
+### Custom Transfer 診斷
+
+Device UART（P15／P16，115200）的啟動與錯誤訊息，可對照初始化、CAN 連線及封包處理。
+
+| Device UART 欄位 | 意義與核對方式 |
+| --- | --- |
+| `CAN init: OK/FAIL`、`result` | CAN 初始化結果；`0x0000` 表示成功，非零值依各 MCU driver 定義 |
+| `global_status`／`channel_status` | F24 controller 原始狀態；保留完整值供診斷，不與 F13 的狀態數值直接比較 |
+| `stage` | F24 初始化階段；`5` 表示 ready，未完成的 `1..4` 見下表 |
+| `CAN config` | 編譯設定：Classical 500K、request `0x710`、response `0x711`、filter `0x710/0x7FF` |
+| `STB=P12_LOW/HIGH` | MCU 的 P12 output latch；成功後應為 LOW，初始化失敗維持 HIGH。這不是供電或腳位電壓量測 |
+| `TRACE CT RX/TX` | ID、DLC、完整資料、sequence、command 與 CRC；TX 表示 driver 接受傳送，不等於已收到 CAN ACK |
+| `TRACE CT CAN_ERROR` | 已擷取的 Classical CAN 錯誤旗標與名稱；重複故障期間最多每 250 ms 輸出一次 |
+
+| F24 stage 1..4 | 檢查位置 | 未通過時的核對方向 |
+| ---: | --- | --- |
+| 1 | driver configuration | 保留 result，核對 SC 與 clock／CAN 設定 |
+| 2 | ID／global／channel reset state | 核對 request ID 與 controller raw status |
+| 3 | start communication | 核對 driver result 與 mode transition |
+| 4 | communication active | 等待有界；逾時回報 WAITING，核對 controller／bus 狀態 |
+
+F24 的 `clock status: OK` 表示時鐘初始化檢查通過，不是頻率量測。
+若時鐘初始化未通過，程式保留 standby，且不使用尚未符合 clock 設定的 UART 輸出。
+
+GET_STATS index 7／8／9 分別是 warning／error-passive／bus-off 擷取計數，index 11 是最後擷取的錯誤旗標。
+F13 由 error ISR 擷取；F24 由主迴圈輪詢並清除已觀察旗標，不在 ISR 格式化文字。
+硬體旗標可能合併多次事件，計數表示軟體擷取次數；counter 飽和於 `0xFFFF`。
+`CLEAR_STATS` 會重設統計，因此零次紀錄不等於已量測到沒有實體錯誤。
+
+比對封包時開啟 Tool 的 `Detailed trace (slower)` 與 Log，另存 device UART 與 analyzer trace。
+量測速度時將 device 的 `CAN_TRANSFER_UART_TRACE_ENABLE` 設為 `0U` 後重建，並關閉 Tool detailed trace；
+錯誤擷取與 GET_STATS 仍運作。
+完整 byte／command／counter 定義見 [通訊測試協定](https://github.com/released/simple_renesas_isp_tool/blob/main/docs/F13_TRANSFER_PROTOCOL.md)。
+<!-- TRANSFER_DIAGNOSTICS_END -->
+
 Analyzer 可送出 DEVICE_INFO page0：
 ID `0x710`，資料 `A5 01 01 01 00 00 00 DC`。
 F13 範例回覆為 ID `0x711`、`5A 01 01 01 00 01 00 8D`。
@@ -190,6 +228,57 @@ F13 範例回覆為 ID `0x711`、`5A 01 01 01 00 01 00 8D`。
 <figure><img src="img/benchmark_pcan.jpg" alt="Custom Transfer request與response"><figcaption>CAN analyzer 的 request／response 與 error counter。</figcaption></figure>
 
 <figure><img src="img/benchmark_mcu_log.jpg" alt="Device UART TRACE RX/TX"><figcaption>MCU UART 的 sequence、command、payload 與 CRC 訊息。</figcaption></figure>
+
+<!-- CUSTOM_TRANSFER_MEDIA_BEGIN -->
+<a id="f24-custom-transfer-example"></a>
+
+### F24 (MCU CAN device)：Custom Transfer 操作範例
+
+範例使用 `RL78_F24_CAN_Transfer`，Classical CAN 500K，request／response 為 `0x710／0x711`。
+操作畫面與 MCU UART 可對照 discovery、測試命令及結果；點選圖片可開啟原尺寸。
+
+畫面上方保留的 F13 App BIN 屬於 **OFFLINE** 檔案資訊，Custom Transfer 不使用此 BIN。
+實際連線的 device 以 **DEVICE TARGET** 的 live 回覆為準；此例為 `R7F124FP`、target `0xF24B`。
+Custom Transfer 不回報 Boot／App metadata，對應 LIVE INFO 顯示 `N/A` 是此模式的正常狀態。
+
+#### 1. Tool：選擇通訊測試
+
+Host 連線完成後，CAN 頁選擇 `Custom Transfer`、Classical 500K，再執行 `Discover Test Target`。
+
+[![Tool 選擇 Custom Transfer，device 尚未探索](images/custom_transfer/CAN_custom_transfer_1.png)](images/custom_transfer/CAN_custom_transfer_1.png)
+
+圖：Host 已連線、device 尚未探索。此模式使用通訊測試命令，更新按鈕不啟用。
+
+#### 2. MCU UART：Discovery 回覆
+
+`DEVICE_INFO` 的 sequence 1..7 依序回覆 protocol、target、part prefix 與 capabilities。
+圖中的 RX／TX 分別是 `0x710／0x711`，各筆顯示 `crc=OK`；target page 的 `4B F2` 為 little-endian `0xF24B`。
+
+[![MCU UART 的 DEVICE_INFO sequence 1 到 7 收發紀錄](images/custom_transfer/CAN_custom_transfer_mcu_log_1.png)](images/custom_transfer/CAN_custom_transfer_mcu_log_1.png)
+
+圖：Device discovery 的 CAN request／response，可核對相同 sequence、command、payload 與 CRC。
+
+#### 3. Tool：Transfer Test 完成
+
+探索完成後，DEVICE TARGET 顯示 `R7F124FP / 0xF24B / protocol 1.0`。
+執行 `Transfer Test` 後，Log 顯示 `Custom Transfer test completed successfully`，進度為 100%。
+
+[![Tool 顯示 F24 device 身分及 Custom Transfer 測試完成](images/custom_transfer/CAN_custom_transfer_2.png)](images/custom_transfer/CAN_custom_transfer_2.png)
+
+圖：正常通訊測試完成。Log 的 `F24 counters: CAN RX=22, TX=22` 是 **MCU host** 的統計；
+`Custom Transfer statistic[index]` 則來自 **MCU device** 的 GET_STATS 回覆。
+
+#### 4. MCU UART：測試命令與統計
+
+Sequence 8..22 可對照 PING（`0x02`）、ECHO（`0x03`）、PATTERN_TEST（`0x04`）與 GET_STATS（`0x05`）。
+UART 圖中各筆 request／response 均顯示 `crc=OK`，可與 Tool 結果交叉核對。
+
+[![MCU UART 的 PING ECHO PATTERN 與 GET_STATS 收發紀錄](images/custom_transfer/CAN_custom_transfer_mcu_log_2.png)](images/custom_transfer/CAN_custom_transfer_mcu_log_2.png)
+
+圖：Device 的測試命令與統計回覆。Counter 定義與判讀見 [Custom Transfer 診斷](#transfer-diagnostics)。
+
+這組操作紀錄呈現正常 discovery／通訊測試；不包含 CAN 波形量測、故障注入、斷線恢復或 Boot／App 擦寫驗證。
+<!-- CUSTOM_TRANSFER_MEDIA_END -->
 
 <a id="f13-device-update"></a>
 <a id="mcu-can-device"></a>
@@ -209,6 +298,8 @@ App Start 使用 BIN metadata；手動 override 作為額外核對值。
 
 先完成 Host Probe，在 CAN 頁選取 `CAN Upgrade`、Bridge port 與 device 使用的 bitrate。
 以下圖片使用 F13 (MCU CAN device)，各欄數值來自所載入 BIN 與 live device；操作順序依回報模式選擇。
+F13 與 F24 device 的正常 CAN App 更新皆已完成實板驗證，使用相同的載入、探索、進 Boot、更新及 App 確認流程。
+F24 的完成報告與執行畫面見 [F24 device 更新結果](#f24-device-update-example)。
 完整[欄位與狀態判讀](https://released.github.io/slide_isp_tool_for_RL78/#tool-ui-fields)集中於 Tool operation。
 
 #### 1. 載入 Device App BIN
@@ -259,6 +350,7 @@ START 已接受後失聯不會沿用步驟 3 的自動返回原 App 行為；取
 只有 END／CRC 通過、APP_READY 與 live INFO 核對完成後，才顯示 `[COMPLETE]` 與 Device App update complete。
 正常完成會停止 Host CAN、保留 COM（Host UART），讓使用者檢查 App 與板上功能；因此 DEVICE TARGET 回到 N/A 並要求再次 Discover 是完成清理後的狀態。
 App 未確認或 CAN STOP 未確認時，依[完成提示與下一步](https://released.github.io/slide_isp_tool_for_RL78/#update-completion)處理，不自動重寫。
+Tool 自動保存 Firmware update report；右下 `MESSAGE LOG` 的 `Open Last Report` 可開啟報告，操作見[更新報告](https://released.github.io/slide_isp_tool_for_RL78/#update-html-report)。
 
 [![Device 更新完成並確認 App 後停止 CAN 保留 COM](images/tool_operation/tool_CAN_update6_after_update.jpg)](images/tool_operation/tool_CAN_update6_after_update.jpg)
 
@@ -278,6 +370,42 @@ flowchart TD
     END --> APP["確認 APP_READY 與 live INFO"]
     APP --> DONE["停止 Host CAN / 保留 COM<br/>顯示完成或停止警告"]
 ```
+
+<a id="f24-device-update-example"></a>
+
+### F24 (MCU CAN device)：更新結果與 App 執行
+
+F24 device 已確認可完整執行正常 CAN App 更新：配對 Boot 驗證映像、寫入 App、
+END／CRC 通過、reset 後回報 APP_READY，Tool 再核對 live INFO 並停止 Host CAN。
+操作沿用上方六個步驟，載入檔案改為 `RL78_F24_Boot_loader_CAN_app_update.bin`，
+並核對 F24 device 自己的 MCU、target、Flash 配置與 IRQ ABI。
+
+#### 更新報告
+
+HTML 報告的 `PASS | CAN device update` 與 `[COMPLETE]` 表示寫入、CRC 及 App 啟動確認均完成，
+不以進度到達 100% 單獨判定成功。圖中 Host Link 為 115200，CAN 為 Classical 500K。
+
+[![F24 device CAN App 更新報告顯示 PASS 與 App 啟動已確認](images/tool_operation/firmware_update_report.png)](images/tool_operation/firmware_update_report.png)
+
+| 報告項目 | 判讀方式 |
+| --- | --- |
+| `Target before operation` | 更新前的 device 模式與已安裝 App；不是更新後版本 |
+| `Input bytes` | 此次載入並傳送的 App BIN 長度，與 Flash capacity 分開 |
+| `App version / Build / Image bytes` 比對 | 完整 HTML 的 live 值與載入 BIN 相符，代表重啟後辨識到此次 App |
+| `CAN stopped; Host COM remains open` | App 確認後停止 CAN、保留 Host COM；下一次更新先重新 Discover |
+
+開啟方式、完整欄位與錯誤判讀集中於 [更新報告](https://released.github.io/slide_isp_tool_for_RL78/#update-html-report)。
+
+#### Device UART 執行紀錄
+
+UART 畫面顯示 `boot-validated`、`CAN update: completed`，以及 `log(timer)-V1` counter 從 0 持續遞增。
+這份紀錄與 Tool 的 APP_READY／live INFO 一起確認 App 已啟動、timer 與主迴圈持續運作。
+V1 是可編輯的觀察標籤，不取代 metadata 的版本號；修改位置見 [App 執行標籤](https://released.github.io/slide_boot_loader_for_RL78/#device-app-runtime-log)。
+
+[![F24 device 更新後 App UART 顯示 V1 與遞增 counter](images/tool_operation/MCU_F24_Device_app_log.png)](images/tool_operation/MCU_F24_Device_app_log.png)
+
+以上確認正常 115200 Host Link／500K CAN 更新與 App 執行。
+250K／1M、長時間壓力、其他 IRQ、取消、拔線及斷電復原各自依 [實板驗證矩陣](https://released.github.io/slide_isp_tool_for_RL78/#update-confirmation) 保留測試結果。
 <!-- TOOL_DEVICE_MEDIA_END -->
 
 <a id="can-upgrade-performance"></a>
@@ -719,6 +847,7 @@ Host Boot 保持固定UART115200；一般 Host Link 連線速度見 [更新政�
 
 `Host App update complete - RUN required` 表示映像寫入、CRC 與 metadata readback 通過，**還沒有啟動 App**。
 下一步是明確執行 RUN，不需再次燒錄。
+此次寫入結果會自動保存為 Firmware update report，可按 `Open Last Report` 查看；[報告操作](https://released.github.io/slide_isp_tool_for_RL78/#update-html-report)說明儲存位置與判讀方式。
 
 [![Host App 寫入完成但尚待 RUN](images/tool_operation/tool_Bridge_update5_after_update.jpg)](images/tool_operation/tool_Bridge_update5_after_update.jpg)
 
@@ -733,6 +862,7 @@ Host Boot 保持固定UART115200；一般 Host Link 連線速度見 [更新政�
 Tool 自動重連同一 COM，重新讀取並核對已安裝 App 資訊。
 `Host App startup confirmed` 與 `[COMPLETE] Host App is running` 表示此階段完成；之後可選擇 CAN 等 device 介面。
 若 Log 的 counter 顯示 unavailable，代表該次重啟前後無可比對的 snapshot，不等於此處的 App 更新失敗。
+此時 `Open Last Report` 開啟的是本次 RUN 確認報告；先前的寫入報告仍保留於 `reports/`。
 
 [![RUN 後自動重連並確認 Host App](images/tool_operation/tool_Bridge_update7_update_finish.jpg)](images/tool_operation/tool_Bridge_update7_update_finish.jpg)
 <!-- TOOL_BRIDGE_MEDIA_END -->
@@ -912,6 +1042,9 @@ Metadata 位址與欄位格式見 [Device 映像對照](https://released.github.
 
 Host Link 換速完成後會重新確認 host 身分。
 尚未確認時，host 在2秒內回到115200；已確認後維持該次連線速度。
+
+Device 改為 250K／1M 時，依 [Device CAN 速率配置](https://released.github.io/slide_boot_loader_for_RL78/#device-can-bitrate)
+同步修改 driver timing、Boot／App 的速率契約並重建安裝；Tool 下拉選單只設定 host，不改變 device。
 
 ```mermaid
 sequenceDiagram
@@ -1295,6 +1428,19 @@ CAN 更新、Misc 更新及 Misc RUN 結束時，Tool 在 EXE 旁的 `reports/` 
 成功、失敗與取消都有紀錄；檔案以時間與唯一尾碼區分，不覆寫既有報告。
 目錄或寫檔失敗會顯示在 shared log，並保留手動 Export Summary。
 
+#### 更新完成後開啟 Firmware update report
+
+1. 更新成功後，確認完成對話框與 `[COMPLETE]` 提示。報告會自動儲存，不需先按 Export Summary。
+2. 在右下 `MESSAGE LOG` 群組按 `Open Last Report`，以預設瀏覽器開啟 **Firmware update report**；Tool 不會自行開啟瀏覽器。
+3. 先核對 `operation`、`result` 與 `message`，再查看目的地、載入映像、CRC、App 確認及階段時間。
+   CAN 更新包含 App 啟動確認；Misc 寫入完成仍需明確 RUN，RUN 的確認另存一份報告。各結果見[完成提示與下一步](#update-completion)。
+4. 需要保存或分享紀錄時，可從 EXE 旁的 `reports/` 取得同名 `update_*.html` 與 `update_*.json`。
+   HTML 可直接離線閱讀；對外分享前可先核對其中的 COM、檔案路徑及裝置資訊。
+
+`Open Last Report` 開啟本次 Tool 執行期間最後成功儲存的 HTML；尚未產生時按鈕不啟用。
+重新開啟 Tool 後，可直接從 `reports/` 開啟歷史報告。
+實際畫面見 [MCU CAN device 更新報告範例](https://released.github.io/slide_isp_tool_for_RL78/#f24-device-update-example)。
+
 | 產物 | 閱讀與使用方式 |
 | --- | --- |
 | HTML 更新報告 | 瀏覽器離線開啟；顯示結果、Host／Device、BIN CRC／身分、階段時間、counter 範圍與檢查建議 |
@@ -1302,8 +1448,7 @@ CAN 更新、Misc 更新及 Misc RUN 結束時，Tool 在 EXE 旁的 `reports/` 
 | App 編譯報告 | 記錄建置產生的 BIN、Metadata 與向量表；見 [編譯報告](https://released.github.io/slide_boot_loader_for_RL78/#device-app-build-report) |
 
 更新報告對應實際 Tool 作業；編譯報告對應建置產物，兩者用途分開。
-`Open Last Report` 開啟本次 Tool 執行期間最後成功儲存的 HTML；尚未產生時按鈕不啟用。
-也可直接從 `reports/` 開啟歷史檔案。報告不自動開啟瀏覽器，無外部腳本或資源需求。
+HTML 報告無外部腳本或資源需求。
 
 產生、編碼與寫檔由 worker 執行。
 檔案先寫入暫存檔並完成 flush，再以不覆寫既有檔案的方式發布。
@@ -1311,7 +1456,7 @@ CAN 更新、Misc 更新及 Misc RUN 結束時，Tool 在 EXE 旁的 `reports/` 
 
 | 報告欄位 | 內容／範圍 |
 | --- | --- |
-| operation／result／message | 更新目的地、PASS／FAIL／CANCELED、失敗原因 |
+| operation／result／message | 更新目的地、PASS／FAIL／CANCELED、完成範圍或失敗原因 |
 | recorded_at_utc | 報告建立時間，UTC ISO 8601 |
 | failure_guidance | 保留原始錯誤、作業／COM／Host Baud／階段及對應檢查建議；成功時為空 |
 | host／port／host_baud／can | 本次選定的 Host 身分、COM 與速度、CAN 設定 |
@@ -1438,11 +1583,14 @@ A／B 使用不同 IRQ mapping 與 ISR 名稱，各自執行 CS+ clean compile�
 
 ### 實板驗證紀錄
 
-以下項目需要實際板子、可擦寫的測試映像、Tool log 與 CAN analyzer trace。
-未取得板上證據前，狀態維持 NOT RUN；離線模型不替代電氣、Flash 或斷電驗證。
+F13 與 F24 device 的正常 CAN App 更新已完成實板驗證。
+F24 的更新報告、reset 後 App 確認與 UART counter 集中於 [F24 device 更新結果](https://released.github.io/slide_isp_tool_for_RL78/#f24-device-update-example)。
+各測試保留自己的證據範圍；尚無對應紀錄的壓力與故障項目維持 NOT RUN。
+CAN 波形、電氣特性與斷電復原仍需對應量測或故障測試，不由正常更新報告推定。
 
 | 項目 | 測試方式 | 驗收證據 | 狀態 |
 | --- | --- | --- | --- |
+| 正常 CAN device App 更新 | Host Link 115200／Classical CAN 500K；配對 Boot／App | F13／F24：寫入、END CRC、reset 後 APP_READY／live INFO；F24 UART counter 遞增 | PASS |
 | Host Link 三種速度 | 115200／460800／921600 各連續更新 50 次；CAN 速度依 device BIN | 每次 END／APP_READY／live identity、報告；overflow／lost／bus-off 無增加 | NOT RUN |
 | Misc 速度邊界 | 高速 Host App → ENTER → Boot 115200 → 更新 → 明確 RUN → 自動確認 | 同 COM／board、metadata 一致，確認 App 啟動 | NOT RUN |
 | 獨立取消 | Metadata、Transfer、END／確認等階段取消 | ABORT／cleanup 記錄，COM 不由 UI 直接關閉，可重新操作 | NOT RUN |
