@@ -7,6 +7,7 @@
 
 本頁包含 Tool 連線、共用 BIN／metadata／log、Custom Transfer、CAN device App 更新、I2C 探索及 Misc Host App 更新。
 公開導覽使用功能名稱；量測版本與雜湊由交付紀錄提供。
+首頁 `ISP_MODE_NAV` 區分 Classical CAN（F13／F24）、CAN FD（F24）及 Custom Transfer 三種範例，僅提供操作跳轉。
 
 ## 主題維護
 
@@ -30,7 +31,7 @@
 | Host App 工程與向量設定 | SHARED_CONSOLE_BRIDGE_GUIDE 的 F24_APP_IRQ／sync_f24_app_irq_guide.ps1 |
 | COM／Device App／Host App 操作圖 | SHARED_CONSOLE_BRIDGE_GUIDE 的 TOOL_*_MEDIA／sync_tool_operation_media.ps1 |
 | 更新政策與通訊速度 | COMMON_IMAGE_METADATA／sync_common_image_policy.ps1 |
-| Custom Transfer 診斷欄位與錯誤統計 | MULTIBUS_TOOL_GUIDE 的 TRANSFER_DIAGNOSTICS／sync_transfer_diagnostics.ps1 |
+| Custom Transfer 三種範例分類／操作入口／診斷 | MULTIBUS_TOOL_GUIDE 的 TRANSFER_EXAMPLES、TRANSFER_DIAGNOSTICS／sync_transfer_diagnostics.ps1 |
 | F24 device Custom Transfer 操作圖 | MULTIBUS_TOOL_GUIDE 的 CUSTOM_TRANSFER_MEDIA／sync_custom_transfer_media.ps1 |
 
 Device metadata／vector 編輯、各 device 工程、Boot decision、移植及逐 byte 參考集中於
