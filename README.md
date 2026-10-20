@@ -18,8 +18,13 @@
 `scripts/web_guide_sections.json` 定義主題歸屬。
 同步後，完整章節只保留在所屬頁面，其他頁面使用跳轉連結。
 
+原始碼與交付檔的發佈前檢查、本機資料追蹤排除及重試方式，見
+[GitHub 維護操作](https://github.com/released/simple_renesas_isp_tool/blob/main/docs/GITHUB_PUBLISH_zh-TW.md)。
+
 | 本頁完整章節 | 原稿／同步腳本 |
 | --- | --- |
+| CAN FD 操作／64-byte資料幀 | CAN_FD_UPDATE 的 FD_UPDATE／sync_can_fd.ps1 |
+| CAN FD Custom Transfer | CAN_FD_UPDATE 的 FD_TRANSFER／sync_can_fd.ps1 |
 | 下載與操作入口 | MULTIBUS_TOOL_GUIDE 的 PUBLIC_RESOURCES／sync_public_resources.ps1 |
 | Tool→MCU CAN host→MCU CAN device 逐層導讀 | CAN_UPDATE_WALKTHROUGH／sync_can_update_walkthrough.ps1 |
 | Host App 工程與向量設定 | SHARED_CONSOLE_BRIDGE_GUIDE 的 F24_APP_IRQ／sync_f24_app_irq_guide.ps1 |

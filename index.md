@@ -10,9 +10,11 @@ FirmwareUpgradeTool 透過 MCU CAN host 與 CAN device 通訊。
 - [連線與主畫面](#tool-operation)
 - [欄位、Metadata 與狀態訊息](#tool-ui-fields)
 - [Custom Transfer](#custom-transfer)
+- [CAN FD Custom Transfer](#can-fd-custom-transfer)
 - [MCU CAN device 更新](#mcu-can-device)
 - [Host App 更新](#host-bridge-firmware)
 - [更新政策與通訊速度](#image-update-policy)
+- [CAN FD App 更新](#can-fd-update)
 
 <!-- PUBLIC_RESOURCES_BEGIN -->
 <a id="downloads"></a>
@@ -1130,21 +1132,47 @@ CAN device 更新完成後由 Tool 自動確認 App；Misc 的 RUN 仍由使用�
 CAN 確認沿用現有 Host Link 與 CAN 路由，不會重新掃描其他 COM。
 版本等摘要與健康回覆是目前執行的韌體回報，不是簽章或功能完整性的認證。
 
+<a id="app-restart-confirmation"></a>
+
+### 重啟等待與 App 確認
+
+END CRC 通過後，Tool 先保留 1 秒的重啟等待，再開始 APP_READY 唯讀查詢。
+等待期間不送出 CAN 請求，不切換 COM 或重送 END；Cancel 仍可結束確認流程。
+這段等待包含在原有 12 秒的探測期限內，後續未就緒的查詢間隔至少 100 ms。
+單次通訊仍有自身的逾時邊界；等待值不是所有 App 的最長啟動時間保證。
+
+`phases_ms.app_confirmation` 包含重啟等待及 App 確認耗時。
+`details` 的 `app_reset_quiet_ms` 與 `app_health_probes` 分別記錄等待設定及實際健康查詢次數。
+逾時、取消或 live 資訊不符時，保留 END 已通過的事實，不自動重寫映像。
+
+### 寫入與啟動確認流程
+
 ```mermaid
 flowchart TD
-    A["Tool 驗證 BIN 與 live metadata"] --> M["1 Metadata 暫存與 seal"]
-    M --> S["2 START：接受更新宣告"]
-    S --> B["3 Transfer：逐區塊驗證與寫入"]
-    B --> E["4 END：完整映像 CRC"]
-    E -->|通過| R["MCU CAN device reset，Boot 驗證後交接 App"]
-    R --> H{"5 APP_READY 與 live INFO 相符？"}
-    H -->|是| SC["App confirmed；停止 Host CAN，保留 COM"]
-    SC --> CS{"CAN STOP 已確認？"}
-    CS -->|是| OK["完成提示；檢查 App；保存報告"]
-    CS -->|否| CW["App 已確認／CAN 停止未確認；顯示警告並保存報告"]
-    H -->|逾時或不符| NO["已寫入／App 未確認；保存報告，不自動重寫"]
-    M -->|取消或錯誤| C["嘗試 ABORT／停止 CAN；保存結果"]
+    A["驗證 BIN／live；1 Metadata 與 2 START"] --> B["3 Transfer：區塊驗證與寫入"]
+    B --> E{"4 END：完整 CRC 通過？"}
+    E -->|是| W["5 device reset／Boot 交接 App；Tool 重啟等待"]
+    W --> H{"APP_READY 與 live INFO 相符？"}
+    H -->|是| SC["App confirmed；進入完成結果判定"]
+    H -->|逾時或不符| NO["END 已通過／App 未確認；保存結果，不自動重寫"]
+    W -->|取消| NO
+    A -->|取消或錯誤| C["停止更新／清理；保存結果"]
     B -->|取消或錯誤| C
+    E -->|否| C
+```
+
+### 完成結果與計數判定流程
+
+```mermaid
+flowchart TD
+    A["App confirmed；請求停止 Host CAN"] --> CS{"CAN STOP 已確認？"}
+    CS -->|是| CT{"本次 Host 錯誤計數增加？"}
+    CT -->|未見增加| OK["完成提示；保留計數比較範圍"]
+    CT -->|是| HW["完成／計數警告；保留差值與 trace"]
+    CS -->|否| CW["完成／CAN 停止未確認；保留 CAN 狀態"]
+    OK --> R["保留 Host COM；保存報告；檢查 App"]
+    HW --> R
+    CW --> R
 ```
 
 <a id="update-completion"></a>
@@ -1158,6 +1186,7 @@ flowchart TD
 | 操作結果 | 畫面提示 | 下一步 |
 | --- | --- | --- |
 | CAN device 更新且 App 啟動確認通過 | `Device App update complete`；CRC／App 已確認，Host CAN 停止，COM 保留 | 可檢查 App code 與板上功能；再次更新時重新 Discover Target |
+| App 已確認、CAN 已停止，但本次 Host 錯誤計數增加 | `Device App updated / Host counter warning`；黃色 `[COMPLETE / WARNING]` | 更新成功；查看報告的 counter 差值與 detailed trace，不以重寫 App 清除警告 |
 | App 啟動已確認，但 Host CAN STOP 未確認 | `Device App updated / CAN stop not confirmed`；黃色 `[COMPLETE / WARNING]` | 更新已成功，CAN 可能仍在運作；查看 Shared Log，使用 Disconnect／Close COM 清理後再調整介面，不以重寫 App 處理停止警告 |
 | Misc Host App 寫入與驗證通過 | `Host App update complete - RUN required`；Host 停留 Boot | 按 `Run Validated Bridge App`；若按鈕不可用，先 Read Bridge Update Info／Probe Host |
 | Misc 明確 RUN 並重連確認通過 | `Host App startup confirmed`；同一 COM、board 與已安裝映像核對完成 | 可檢查 Host App 或切換至 device 介面 |
@@ -1456,13 +1485,14 @@ HTML 報告無外部腳本或資源需求。
 
 | 報告欄位 | 內容／範圍 |
 | --- | --- |
-| operation／result／message | 更新目的地、PASS／FAIL／CANCELED、完成範圍或失敗原因 |
+| operation／result／message | 更新目的地、PASS／PASS_WITH_WARNINGS／FAIL／CANCELED、完成範圍或失敗原因 |
 | recorded_at_utc | 報告建立時間，UTC ISO 8601 |
 | failure_guidance | 保留原始錯誤、作業／COM／Host Baud／階段及對應檢查建議；成功時為空 |
 | host／port／host_baud／can | 本次選定的 Host 身分、COM 與速度、CAN 設定 |
 | elapsed_ms／phases_ms | 整次作業與各階段耗時；不是 analyzer 測得的 bus time |
 | details | 映像 CRC／大小／版本／build、已 ACK 區塊、ABORT 與 App 確認結果 |
-| host_deltas | 本次 CAN 更新前後的 UART overflow、CAN lost／TX failure／bus-off／recovery 差值 |
+| host_deltas | 本次 CAN 更新前後的 UART overflow、CAN lost／warning／error-passive／TX failure／bus-off／recovery 差值 |
+| host_counter_assessment／host_counter_note | 本次計數比較的判定及範圍；與映像寫入／App 確認結果分開記錄 |
 | host_peaks | Host 自開機或 CLEAR_STATS 起的 queue 高水位、最長等待／交易／dispatcher 時間；不是本次區間峰值 |
 | link_retries | 本次 Host Link 重試；已知重連重設時為 null，不當成零 |
 
@@ -1527,6 +1557,17 @@ Host 計數器飽和、可辨識的重設（例如計數回退）或缺少有效
 Misc 會跨 Boot／App reset，故不將這兩邊的 counter 相減。
 時間診斷單位為 1 ms，低於解析度的值可以是 0；queue 水位以 bytes 或 frames／pending transactions 表示。
 
+| 計數判定 | 意義 |
+| --- | --- |
+| `NO_RECORDED_ERRORS` | 可比較的上述七項錯誤計數均未增加；不等於分析儀波形或 device queue 壓力測試通過 |
+| `WARNING` | 至少一項可比較的錯誤計數增加；其他欄位若無法比較，仍保留 unavailable |
+| `UNAVAILABLE` | 尚無可確認的增加，但快照缺少、倒退或飽和，無法完整比較；不是零錯誤結論 |
+
+更新及 App 確認成功，但 Host 錯誤計數增加或 CAN STOP 未確認時，報告為 `PASS_WITH_WARNINGS`，HTML 使用黃色提示。
+失敗／取消仍分別記為 `FAIL`／`CANCELED`，不會被計數判定改成成功。
+非零累計值不單獨觸發本次警告；Tool 比較的是操作前後的增加量，不會自動清除 Host 計數或重啟板子。
+非同步事件的文字可能稍後才顯示；定位發生階段時可對照 detailed trace 的原始 `TRACE UART EVENT`，不只看彙整訊息的顯示時間。
+
 | Host Boot 停留原因 | 判定 |
 | --- | --- |
 | No valid App | 尚無有效映像標記 |
@@ -1590,14 +1631,311 @@ CAN 波形、電氣特性與斷電復原仍需對應量測或故障測試，不�
 
 | 項目 | 測試方式 | 驗收證據 | 狀態 |
 | --- | --- | --- | --- |
-| 正常 CAN device App 更新 | Host Link 115200／Classical CAN 500K；配對 Boot／App | F13／F24：寫入、END CRC、reset 後 APP_READY／live INFO；F24 UART counter 遞增 | PASS |
-| Host Link 三種速度 | 115200／460800／921600 各連續更新 50 次；CAN 速度依 device BIN | 每次 END／APP_READY／live identity、報告；overflow／lost／bus-off 無增加 | NOT RUN |
-| Misc 速度邊界 | 高速 Host App → ENTER → Boot 115200 → 更新 → 明確 RUN → 自動確認 | 同 COM／board、metadata 一致，確認 App 啟動 | NOT RUN |
+| 正常 CAN device App 更新 | Host Link 115200／Classical CAN 500K；配對 Boot／App | 寫入／END CRC／reset 後 APP_READY／live INFO；F24 UART counter | PASS |
+| Host Link 三種速度 | 115200／460800／921600 各連續更新 50 次；CAN 依 BIN | END／APP_READY／live identity／報告；overflow／lost／bus-off 無增加 | NOT RUN |
+| Misc 速度邊界 | 高速 Host App → ENTER → Boot 115200 → 更新 → RUN／確認 | 同 COM／board／metadata；App 啟動 | NOT RUN |
 | 獨立取消 | Metadata、Transfer、END／確認等階段取消 | ABORT／cleanup 記錄，COM 不由 UI 直接關閉，可重新操作 | NOT RUN |
 | 拔線／重連 | 代表性傳輸點拔除 Host Link，重新接回同一板子 | 不自動續寫；重新 Probe／Discover，安全重做更新 | NOT RUN |
 | CAN 故障 | 代表性區塊期間斷 CAN／bus-off，再恢復 | 錯誤／counter／有限重試，恢復後重新驗證 | NOT RUN |
-| Device 斷電 | START 前、首 erase、中段 write、END、reset 交接時斷電 | 重啟只有在 Boot 的映像／metadata／CRC 啟動檢查通過後進 App，否則停 Boot | NOT RUN |
+| Device 斷電 | START 前／首 erase／write 中段／END／reset 交接時斷電 | Boot 的映像／metadata／CRC 檢查通過才進 App，否則停 Boot | NOT RUN |
 | Host 斷電／SW1 | BEGIN、write、END marker、RUN 前後斷電；按 SW1 | Boot 原始碼／雜湊不變，停留原因及再次更新恢復 | NOT RUN |
 | A／B App IRQ | 分別更新 A、B，觸發各自使用的中斷 | ISR 行為與 mapping 相符，Boot 不重燒 | NOT RUN |
 
 <!-- UPDATE_EVIDENCE_END -->
+
+<!-- FD_UPDATE_BEGIN -->
+<a id="can-fd-update"></a>
+
+## CAN FD App 更新操作
+
+此設定使用 nominal 500 kbit/s、data 2 Mbit/s、BRS，以及 64-byte FD 資料幀。
+Tool 與 MCU CAN host 負責傳輸，MCU CAN device Boot 負責映像驗證與 Flash 寫入。
+F24 CAN FD device 的一般 App 寫入、END CRC、APP_READY 與 UART counter 已有實板紀錄。
+驗證包含初次 Boot 更新，以及 App → Enter Boot → 更新 → App 確認；
+重啟等待後的更新紀錄中，七項 Host 錯誤計數差值均為零。
+長時間連續更新、queue 壓力與故障／斷電恢復仍各自保留驗證範圍。
+
+### 準備與設定
+
+| 項目 | 核對內容 |
+| --- | --- |
+| PC Tool | 使用支援 FD burst 的 FirmwareUpgradeTool |
+| MCU CAN host | F24 Bridge App 宣告 CAN FD bit1 與 FD burst bit13；Host Boot 維持原有版本 |
+| MCU CAN device | 配對的 CAN FD Boot／App；初裝 Boot 使用燒錄器 |
+| Bus | 實際 transceiver、分析儀、供電、共地及終端適用於此 FD 設定 |
+| Tool CAN TAB | CAN FD、Nominal 500K、Data 2M；Standard request0x700／response0x701 |
+| 更新 BIN | `RL78_F24_Boot_loader_CAN_FD_app_update.bin`，metadata mode2、nominal mask4、data mask2 |
+| PC 到 Host Link | 可先用115200；此速度與 CAN nominal／data phase 分開設定 |
+
+若 host 缺少 bit13，Tool 在寫入前拒絕更新。
+使用 [Misc Host App 更新](https://released.github.io/slide_isp_tool_for_RL78/#host-bridge-firmware)
+載入 `RL78_F24_Bridge_app_bridge_update.bin`，完成後明確 RUN、重新 Probe 核對能力。
+此流程更新 Host App，不改 Host Boot。
+
+### 操作順序與結果
+
+| 順序 | 操作 | 核對結果／未符合時 |
+| --- | --- | --- |
+| 1 | Open + Probe Host | Host 身分及能力有效；失敗時先檢查 COM／Host Link |
+| 2 | CAN FD／500K／2M，載入 FD update BIN | Metadata／CRC 有效，介面與 live device 設定一致 |
+| 3 | Discover Target | 顯示 live Boot 或 App；無回覆時檢查兩端 FD timing／接線 |
+| 4 | live App 時按 Enter Boot | 重新確認 Boot；已在 Boot 時不需 ENTER |
+| 5 | Start Device Update | metadata／政策／版本／IRQ／分區通過才進行區塊寫入 |
+| 6 | 等待 END 與 App 確認 | 全映像 CRC、APP_READY 與 live 身分比對通過 |
+| 7 | 閱讀完成提示及 Firmware update report | CAN_STOP ACK 後清除 target session，保留 Host COM |
+
+接收使用 RXMB0 中斷與 8 筆 RAM queue；Boot／App 向量與 Flash 交接詳見
+[FD device 接收與中斷](https://released.github.io/slide_boot_loader_for_RL78/#can-fd-device-rx)。
+實板核對時保留 Tool Log、Firmware update report 與 device UART Log，分別確認：
+
+| 階段 | 可觀察結果 |
+| --- | --- |
+| Boot 安裝／Discover | 使用 programmer 安裝 Boot HEX；Tool 顯示 live Boot、FD 模式與相符的 MCU／分區 |
+| App 更新 | 載入 FD App update BIN；metadata／CRC／路由核對通過後才開始更新 |
+| END 與 App 啟動 | Tool 確認 APP_READY 與 live 版本／build／size；UART 顯示 `CAN update: completed` |
+| App 接收路徑 | UART 顯示 `CAN RX: RXMB0 interrupt -> RAM queue=8 -> main; vector=0x4C`，並持續輸出 V1／V2 counter |
+| 再次更新 | 再次 Discover App → Enter Boot → 更新；若 ENTER 已逾時回 App，重新 Discover／Enter Boot |
+
+有效 App 的 ENTER session 在 START 前使用30秒 inactivity。
+若已返回 App，重新 Discover → Enter Boot，再開始更新；開始寫入後逾時不會直接跳入未完成映像。
+START 本身不擦除 Flash，區塊 COMMIT 驗證通過後才由 Flash driver 寫入。
+
+
+報告及成功／失敗欄位沿用 [更新確認與驗證紀錄](https://released.github.io/slide_isp_tool_for_RL78/#update-confirmation)。
+END 後的等待與查詢時序見 [重啟等待與 App 確認](https://released.github.io/slide_isp_tool_for_RL78/#app-restart-confirmation)；
+完成提示與報告同時保留映像驗證結果及 Host 計數警告。
+Metadata 的逐欄內容見 [共用欄位指南](https://released.github.io/slide_isp_tool_for_RL78/#tool-ui-fields)，
+不以離線 BIN 資訊代替 live device 身分。
+
+### 三幀區塊與 Host Link
+
+每個區塊最多64個有效映像 bytes。
+控制與 ACK 也使用 FD+BRS；控制 payload 保留各命令原有長度。
+下列 LE 值皆為 little-endian，offset 以 App BIN 開頭為0。
+
+| CAN ID／payload | Byte位置 | 意義 |
+| --- | --- | --- |
+| 0x700 BEGIN，8 bytes | 0 | 0x0B |
+| 同上 | 1..3 | 區塊 offset，LE24、64-byte對齊 |
+| 同上 | 4..7 | 實際有效區塊資料的 CRC32 |
+| 0x720 DATA，64 bytes、wire DLC15 | 0..N-1 | N=min(64,image_size-offset) 個映像 bytes |
+| 同上 | N..63 | 尾塊不足64時固定補FF；Boot逐byte檢查，不計入區塊 CRC |
+| 0x700 COMMIT，8 bytes | 0／1..3／4..7 | 0x0C／相同offset／相同CRC |
+| 0x701 ACK，8 bytes | 0／1／2..3／4..7 | 0x0C／status／LE16區塊序號／LE32下個絕對寫入address |
+
+完整區塊使用 BEGIN8 + DATA64 + COMMIT8，共3幀。
+Host Link command22 的 version2 將它們放入101-byte payload，仍低於128-byte上限。
+Header12 bytes之後，每筆為 LE16 standard ID、wire DLC、decoded-length data；
+version2 的所有幀及預期回覆均為 FD+BRS，header byte9固定0x0C。
+此擴充僅接受 DLC0..8 或15（64bytes）；Classical version1／bit12保持原有格式。
+Host 只解碼與傳輸幀，不解讀 BEGIN、Flash address 或 device metadata。
+
+同一區塊可因明確逾時／CRC／sequence結果有限重送。
+Boot接受相同資料的重複幀，拒絕衝突幀，最近已提交區塊的重送不會再次寫入。
+線路中斷後不自動續寫；重新連線並確認 device 狀態後再操作。
+### 更新流程總覽
+
+```mermaid
+flowchart TD
+    HOST["Probe MCU CAN host / FD能力"] --> SELECT["CAN FD /500K /2M /載入BIN"]
+    SELECT --> LIVE["Discover MCU CAN device"]
+    LIVE --> MODE{"live App？"}
+    MODE -->|是| ENTER["Enter Boot /重新確認"]
+    MODE -->|否，已在Boot| META["metadata /政策 /版本 /IRQ /分區核對"]
+    ENTER --> META
+    META -->|通過| WRITE["START / FD區塊 / COMMIT"]
+    META -->|不符| STOP["拒絕寫入 /顯示原因"]
+    WRITE --> END{"END CRC與App確認通過？"}
+    END -->|是| DONE["CAN_STOP /完成提示 /HTML與JSON報告"]
+    END -->|否| ERROR["記錄失敗 /有限清理 /重新確認狀態"]
+```
+<!-- FD_UPDATE_END -->
+
+<!-- FD_DEVICE_BEGIN -->
+<a id="can-fd-device-engineering"></a>
+
+## MCU CAN FD device 工程設定
+
+CAN FD Boot/App設定來源、timing、metadata、建置與產物集中於Device指南。
+[閱讀完整章節](https://released.github.io/slide_boot_loader_for_RL78/#can-fd-device-engineering)
+<!-- FD_DEVICE_END -->
+
+<!-- FD_TRANSFER_BEGIN -->
+<a id="can-fd-custom-transfer"></a>
+
+## CAN FD Custom Transfer 通訊測試
+
+Custom Transfer 驗證 MCU CAN host 與 MCU CAN device 的收發，不使用更新 BIN，也不擦寫 Flash。
+FD 範例使用 `RL78_F24_CAN_FD_Transfer` 獨立整機映像，由燒錄器安裝。
+此映像使用自己的 SC 工程與相鄰 FD Boot 工程的 common 後端；它不經 Boot/App 更新流程啟動。
+
+接收使用 RX Message Buffer 0（64-byte 容量）與中斷，資料經 8 筆 RAM queue 交給主迴圈。
+Standard 0x710／mask 0x7FF 的規則只儲存到 RXMB0；接收 FIFO 不啟用，TX 完成狀態仍由主迴圈輪詢。
+啟動訊息為 `CAN RX backend: RXMB0 interrupt -> RAM queue=8 -> main; payload=64 TX=polling`。
+ISR、queue 與主迴圈的分工見[中斷接收路徑](#can-fd-transfer-rx-interrupt)。
+
+### 操作與核對
+
+| 步驟 | 設定／操作 | 核對結果 |
+| --- | --- | --- |
+| 1 | 燒錄 `DefaultBuild/RL78_F24_CAN_FD_Transfer.hex` | UART115200 顯示 `FD 500K/2M BRS payload=8/64` 與 CAN init OK |
+| 2 | Tool Open + Probe Host | Host 支援 CAN FD、standard ID及通用 TX_WAIT_RX；F24 Host App1.7.0可使用 |
+| 3 | CAN TAB → Custom Transfer | BIN與metadata不參與此測試；上方保留的OFFLINE檔案不代表live target |
+| 4 | CAN FD、Nominal500K、Data2M、RX Filter Metadata/default | standard request0x710／response0x711、mask0x7FF |
+| 5 | Discover Test Target | 讀取7頁DEVICE_INFO，顯示live target與capabilities |
+| 6 | Transfer Test | PING／ECHO／PATTERN、3組FD64 ECHO及12項統計通過 |
+| 7 | Disconnect | 結束CAN session後可選其他設定 |
+
+既有 Classical device 使用 Classical CAN 與其已編譯速率。
+FD mode不會讓Classical firmware自動支援FD；測試時匯流排上的節點需適用於所選幀格式與速率。
+Bridge Self Test是另一項Classical功能，與 `Transfer Test` 的FD64驗證分開。
+
+```mermaid
+flowchart TD
+    SELECT["選Custom Transfer / CAN FD /500K /2M"] --> DISC["Discover Test Target / live能力"]
+    DISC --> SMALL["FD+BRS 8-byte PING / ECHO / PATTERN"]
+    SMALL --> CAP{"FD64能力bit6？"}
+    CAP -->|有| LARGE["3組64-byte ECHO /59-byte資料與CRC8核對"]
+    CAP -->|無| MISSING["提示未執行FD64驗證"]
+    LARGE --> RESULT{"回覆完整且正確？"}
+    RESULT -->|是| STATS["讀取12項GET_STATS"]
+    RESULT -->|否| FAIL["記錄ID /模式 /BRS /長度 /資料或CRC錯誤"]
+    STATS --> ALL{"12項統計皆完成？"}
+    ALL -->|是| DONE["完整測試通過"]
+    ALL -->|否| DIAG["記錄失敗index /對照device STATE與REGS"]
+```
+
+### 幀格式與能力
+
+Discovery、PING、ECHO、PATTERN與統計維持8-byte payload，在FD mode使用FDF=1、BRS=1。
+Classical命令與格式維持原有行為。
+FD64能力由device的DEVICE_INFO page6 bit6（0x0040）宣告；完整範例capabilities為0x007F。
+沒有此能力時，Tool不會將僅完成8-byte測試當作64-byte測試通過。
+
+| 64-byte FD payload位置 | Request | Response |
+| --- | --- | --- |
+| byte0 | A5 | 5A |
+| byte1 | 協定major1 | 同request |
+| byte2 | 非零sequence | 同request |
+| byte3 | ECHO_FD64 command07 | 同request |
+| byte4..62 | 59個測試資料bytes | 完整回傳相同資料 |
+| byte63 | CRC8-ATM，涵蓋byte0..62 | CRC8-ATM，涵蓋response byte0..62 |
+| CAN frame | standard0x710、FDF/BRS、wire DLC15 | standard0x711、FDF/BRS、wire DLC15 |
+
+CRC8-ATM使用poly0x07、init0、無reflection／xorout。
+Tool測試遞增、反向與AA/55交錯三種資料；每幀實際payload為64bytes，包含5bytes協定欄位與59bytes測試資料。
+Device對相同request重送保留完整回覆；相同sequence卻不同資料、CRC錯誤或無效64-byte格式會計數並丟棄。
+Tool對模式／BRS／ID／DLC／sequence／資料／CRC不符回報失敗；等待與重試維持有限上限。
+UART trace區分 `wire_dlc=15 bytes=64`，並列出完整資料。
+測吞吐量時可關閉device UART trace與Tool detailed trace，正常測試則保留以利對照。
+
+<a id="can-fd-transfer-rx-interrupt"></a>
+
+### 中斷接收路徑
+
+| 執行位置 | 工作 | 對應程式／設定 |
+| --- | --- | --- |
+| 硬體接收 | standard 0x710 寫入 RXMB0，產生 INTRCANGRVC | `add_rule()`；RMNB=0x0701、RMIEC=0x0001；實體 vector 0x4C |
+| Renesas ISR | 擷取來源並確認／清除 RMND，再呼叫 callback | `r_can_glb_rxmb_isr()`；`CAN_CFG_INTRCANGRVC_USE=1` |
+| Callback | 呼叫 InHandler，搬移完整 header／payload，最後發布 queue head | `my_can_glb_rxmb_callback()`、`R_CAN_ReadRXMBInHandler()` |
+| 主迴圈 | 取出 queue，核對幀格式、協定、CRC，處理 request／reply 與 UART log | `Device_CanRead()`、`CAN_TransferProtocol_Process()` |
+
+ISR 已先處理 RMND，因此 callback 使用 `R_CAN_ReadRXMBInHandler()`。
+此 API 負責 RAM window 保存／還原及讀取期間的覆寫檢查；ISR 不解析協定、不輸出 UART，也不等待 TX。
+主迴圈只消費 RAM queue，不以 polling 直接讀取 RXMB0。
+
+```mermaid
+flowchart TD
+    BUS["FD+BRS request / standard 0x710"] --> MB["RXMB0 / 64-byte payload"]
+    MB --> IRQ["INTRCANGRVC / vector 0x4C / vendor ISR"]
+    IRQ --> READ["確認 RMND / callback / ReadRXMBInHandler"]
+    READ --> VALID{"讀取成功且未覆寫？"}
+    VALID -->|否| DROP["記錄 overwritten 或 api_errors / 返回"]
+    VALID -->|是| SPACE{"RAM queue 有空位？"}
+    SPACE -->|否| FULL["丟棄本筆 / drops 加一 / 保留既有順序"]
+    SPACE -->|是| QUEUE["搬移 header 與 payload / 發布 head / 返回"]
+    QUEUE --> MAIN["主迴圈取出 / 釋放 tail"]
+    MAIN --> CHECK["格式與 CRC / 協定處理 / UART log"]
+    CHECK --> TX["回覆 0x711 / TX 完成狀態輪詢"]
+```
+
+RAM queue 可保存 8 筆完整訊息；實作用 9 個槽位區分空與滿。
+ISR 是唯一 producer，主迴圈是唯一 consumer，完整複製後才交接槽位。
+queue 滿時丟棄新到訊息，累計 `drops`；不覆寫尚未處理的資料。
+RXMB0 本身仍只有一個硬體訊息位置；讀取期間的硬體覆寫與 RAM queue 滿載分別計數。
+此配置屬於獨立 Transfer 映像；更新工程的接收設定見[FD device 工程](https://released.github.io/slide_boot_loader_for_RL78/#can-fd-device-engineering)。
+
+此 Custom Transfer 中斷接收配置已完成一般一問一答實板驗證。
+此結果的範圍是通訊測試；Flash 更新、queue 滿載、持續流量與供電中斷分別驗證。
+
+<a id="can-fd-transfer-diagnostics"></a>
+
+### 逾時與 RXMB／TX 診斷
+
+`Host returned TIMEOUT for command 0x21.` 代表 Host 已透過 UART 回覆 CAN 交易逾時。
+它與 PC 沒有收到 Host UART 回覆的 `Host Link response timeout after retries.` 分開判讀。
+Tool 保留原始錯誤，另顯示 `attempts`、`last_tx_result` 與失敗的 `GET_STATS index`。
+
+| Tool 診斷 | 意義／核對方式 |
+| --- | --- |
+| `attempts=2` | Host 的 CAN 交易共嘗試兩次，包含第一次發送 |
+| `last_tx_result=2 (TX_END)` | 最後一次 CAN TX 完成；不代表 device 軟體已取出或處理 request |
+| `TRANSMITTING`／`ABORT_OVER`／`END_WITH_ABORT` | 發送未正常完成或包含 abort；與最後 CAN controller 狀態一起核對 |
+| `invalid diagnostic payload` | 回覆長度或保留欄位不符，Tool 不將其解讀為有效 TX 結果 |
+| `GET_STATS index=3` | 停在讀取 device 的 TX failure counter；不代表 counter 本身就是故障原因 |
+
+Device 的 `CAN_TRANSFER_RUNTIME_DIAGNOSTICS_ENABLE` 預設跟隨 `CAN_TRANSFER_UART_TRACE_ENABLE`。
+啟用時，初始化、每 16 筆接收、TX 異常會輸出 `TRACE CT STATE`、`TRACE CT IRQ` 與兩行 `TRACE CT REGS`。
+沒有新接收時，每秒最多一組空閒快照，連續最多三組；有接收後重新計數。
+空閒快照也會在正常等待操作時出現，不單獨代表錯誤。
+
+| Device UART 欄位 | 意義 |
+| --- | --- |
+| `reason` | `INIT`、`RX_CHECKPOINT`、`IDLE_WAIT` 或具體 TX timeout／abort 原因 |
+| `tick`／`seq`／`cmd` | device tick、最近收到的協定 sequence／command；不是 PC 時間 |
+| `sw_tx` | 軟體狀態：0 idle、1 sending、2 aborting、3 fault；sending 快照可能只是尚未輪詢完成 |
+| `rx`／`tx`／`last_driver`／`errors` | 軟體收發計數、最近 HAL 結果及已擷取的 CAN error flags |
+| `RMNB` | RXMB 配置；本範例為 0x0701：1 個 RXMB、64-byte 容量 |
+| `RMND` | 接收完成旗標；bit0=1 表示 RXMB0 有新訊息，由 vendor ISR 確認／清除 |
+| `reads`／`overwritten` | 接收 API 成功次數／讀取期間偵測到的覆寫次數，皆為 16-bit 飽和的軟體觀察計數 |
+| `before`／`after` | callback 內 InHandler 呼叫前後的 RMND；ISR 已先確認旗標，因此 `before=0` 正常 |
+| `entries` | RXMB callback 次數；來源為零或尚未 ready 時不搬資料，不必與協定 RX 筆數相等 |
+| `queued`／`dequeued` | 成功入列／主迴圈取出數；無待處理資料時兩者應相等，計數飽和後不再用差值判讀 |
+| `depth`／`peak` | 當下待處理筆數／初始化以來最高筆數，範圍 0..8 |
+| `drops`／`api_errors` | RAM queue 滿時丟棄的新訊息數／接收 API 其他錯誤或無效長度數 |
+| `RMIEC`／`mask`／`pending` | RXMB 中斷允許位元、快照前 CPU mask、CPU request flag；正常啟動為 RMIEC=1、mask=0 |
+| `window` | CAN RAM window 的原始讀值；RXMB0 資料經 page2 讀取，再還原原先視窗 |
+| `TMC0`／`TMSTS0`／`last_tmsts` | 當下 TX 控制／狀態，以及 TX polling 在正常清除完成旗標前保留的原始值 |
+| `GSTS`／`C0STSL`／`C0ERFLL`／`STB` | Global／channel 狀態、當下 error flags 與 transceiver standby 電位 |
+
+快照在主迴圈暫時遮罩 RXMB 中斷，取得一致的 ISR 軟體計數後，還原原先 mask。
+它不清接收旗標、不消費 queue、不 reset，也不自動重試。
+硬體仍可在此期間接收，寄存器依序讀取；`before`／`after` 不單獨作為通訊完整性的證明。
+ISR／InHandler 使用方式見 [Renesas RS-CANFD Lite 驅動說明](https://www.renesas.com/en/document/apn/rl78f24-rs-canfd-lite-module-software-integration-system)，接收寄存器見[接收緩衝區說明](https://www.renesas.com/en/document/apn/rl78f24-rs-canfd-lite-configuration-reception-and-transmission-rev100)。
+
+遇到逾時時，保留 Tool detailed trace 與 device UART 的最後一筆 RX／TX、`STATE`／`IRQ`／`REGS`。
+先對照 request 是否到達、RMND／reads／overwritten 是否改變、TX 是否完成，再決定處理方向。
+UART 輸出會增加主迴圈延遲；吞吐量量測時可將兩個 trace 開關設為 `0U` 後重建。
+
+連續測試可在同一連線重複執行 `Transfer Test`，核對每輪的 12 項統計均完成，並由 UART `rx` 觀察累計接收跨過 16、32、64 筆。
+同一個 session 可持續接收；不依累計筆數重新初始化 RXMB0。
+一般一問一答測試的 `drops`、`overwritten`、`api_errors` 應保持 0，取出後 `depth=0`，`queued=dequeued`。
+若 `entries` 不增加，先核對 RMIEC／mask／pending 與實際向量；若 `entries` 增加但 `dequeued` 停住，則對照 queue 與主迴圈狀態。
+重新上電時，先確認 device UART 已重新連線並開始記錄，再核對 `INIT`、`CAN init` 與 `STB`；LED 心跳本身不代表 CAN 已就緒。
+
+### 工程與產物
+
+FD Transfer與 `RL78_F24_Boot_loader_CAN_FD` 放在同一父目錄。
+在FD Transfer目錄使用Windows PowerShell5.1：
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\build.ps1
+```
+
+此入口只clean build FD Transfer，不重建Boot或App，不需要Python。
+MTPJ的pre/post hooks引用FD helper；SC重新產生後使用同一入口重新prepare與建置。
+正式產物為 `DefaultBuild/RL78_F24_CAN_FD_Transfer.hex`，供燒錄器安裝，不能載入CAN Upgrade。
+安裝獨立Transfer會取代板端原有程式；燒錄前核對實際MCU、映像與erase範圍。
+CRC／診斷欄位見 [Custom Transfer診斷](https://released.github.io/slide_isp_tool_for_RL78/#transfer-diagnostics)。
+一般中斷接收與 Transfer Test 已完成實板驗證；queue 壓力、波形及故障測試另行記錄。
+<!-- FD_TRANSFER_END -->
