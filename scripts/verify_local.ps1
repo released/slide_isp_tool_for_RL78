@@ -6,8 +6,8 @@ $sources = @((Join-Path $projectRoot 'index.md'),
     (Join-Path $projectRoot 'SCREENSHOT_CHECKLIST.md'),
     (Join-Path $projectRoot 'index.html'),
     (Join-Path $webRoot 'slide_boot_loader_for_RL78\index.md'),
-    (Join-Path $webRoot 'slide_boot_loader_for_RL78\uart_i2c\index.md'),
-    (Join-Path $webRoot 'slide_boot_loader_for_RL78\uart_i2c\index.html'),
+    (Join-Path $webRoot 'slide_boot_loader_for_RL78\basic_uart_i2c\index.md'),
+    (Join-Path $webRoot 'slide_boot_loader_for_RL78\basic_uart_i2c\index.html'),
     (Join-Path $webRoot 'released.github.io\README.md'),
     (Join-Path $webRoot 'released.github.io\README.html'))
 $checked = 0
@@ -31,7 +31,7 @@ foreach ($source in $sources) {
 }
 Write-Host "PASS: $checked local image/page/resource references; Markdown fences balanced."
 $readerPages = @('slide_boot_loader_for_RL78\index.md',
-    'slide_boot_loader_for_RL78\uart_i2c\index.md','slide_isp_tool_for_RL78\index.md')
+    'slide_boot_loader_for_RL78\basic_uart_i2c\index.md','slide_isp_tool_for_RL78\index.md')
 foreach ($page in $readerPages) {
     $pageText = [IO.File]::ReadAllText((Join-Path $webRoot $page))
     $prose = [regex]::Replace($pageText, '(?ms)^```[^\r\n]*\r?\n.*?^```[ \t]*\r?$', '')
@@ -48,7 +48,7 @@ if ($ispEntry.Value -match '(\d+\.\d+\.\d+|Tool\d{4}|\u5de5\u7a0b\u7b2c\u4e00\u7
     throw 'Navigation must describe functions, not pin a release or benchmark.'
 }
 foreach ($page in @('slide_isp_tool_for_RL78\index.md', 'slide_boot_loader_for_RL78\index.md',
-        'slide_boot_loader_for_RL78\uart_i2c\index.md',
+        'slide_boot_loader_for_RL78\basic_uart_i2c\index.md',
         'slide_isp_tool_for_RL78\README.md', 'slide_boot_loader_for_RL78\README.md',
         'released.github.io\README.md', 'released.github.io\README.html')) {
     $pageText = Get-Content -LiteralPath (Join-Path $webRoot $page) -Raw -Encoding UTF8
@@ -216,8 +216,8 @@ if ($PreviewBase) {
     $routes = @('/slide_isp_tool_for_RL78/', '/slide_isp_tool_for_RL78/index.md',
         '/slide_isp_tool_for_RL78/img/benchmark_pcan.jpg',
         '/slide_isp_tool_for_RL78/img/benchmark_mcu_log.jpg',
-        '/slide_boot_loader_for_RL78/', '/slide_boot_loader_for_RL78/uart_i2c/',
-        '/slide_boot_loader_for_RL78/uart_i2c/index.md',
+        '/slide_boot_loader_for_RL78/', '/slide_boot_loader_for_RL78/basic_uart_i2c/',
+        '/slide_boot_loader_for_RL78/basic_uart_i2c/index.md',
         '/released.github.io/README.html', '/notices_can/assets/style.css', '/notices_can/assets/app.js')
     foreach ($route in $routes) {
         $response = Invoke-WebRequest -UseBasicParsing ($PreviewBase.TrimEnd('/') + $route)
