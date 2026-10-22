@@ -31,11 +31,12 @@
 | Host App 工程與向量設定 | SHARED_CONSOLE_BRIDGE_GUIDE 的 F24_APP_IRQ／sync_f24_app_irq_guide.ps1 |
 | COM／Device App／Host App 操作圖 | SHARED_CONSOLE_BRIDGE_GUIDE 的 TOOL_*_MEDIA／sync_tool_operation_media.ps1 |
 | 更新政策與通訊速度 | COMMON_IMAGE_METADATA／sync_common_image_policy.ps1 |
-| Custom Transfer 三種範例分類／操作入口／診斷 | MULTIBUS_TOOL_GUIDE 的 TRANSFER_EXAMPLES、TRANSFER_DIAGNOSTICS／sync_transfer_diagnostics.ps1 |
+| Custom Transfer 範例分類／操作入口／診斷 | MULTIBUS_TOOL_GUIDE 的 TRANSFER_EXAMPLES、TRANSFER_DIAGNOSTICS／sync_transfer_diagnostics.ps1 |
 | F24 device Custom Transfer 操作圖 | MULTIBUS_TOOL_GUIDE 的 CUSTOM_TRANSFER_MEDIA／sync_custom_transfer_media.ps1 |
 
 Device metadata／vector 編輯、各 device 工程、Boot decision、移植及逐 byte 參考集中於
 [MCU CAN device 頁](https://released.github.io/slide_boot_loader_for_RL78/)。
+App BIN 更新耗時參考也集中於該頁的 `#device-update-timing`，本頁保留跳轉入口，不複製量測表格。
 
 修改原稿後執行同步及 `-CheckOnly`，同步相關 PDF。
 操作圖原稿位於 Tool 的 `docs/images/tool_operation`；同步腳本同時核對三段說明與16張公開副本的 SHA-256。
