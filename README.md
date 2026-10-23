@@ -1,13 +1,30 @@
 # RL78 ISP Tool 操作指南
 
 - 網頁入口：<https://released.github.io/slide_isp_tool_for_RL78/>
-- 內容：`index.md`；載入入口：`index.html`。
+- 指南入口：`index.md`／`index.html`；完整章節位於各主題的 `.md`／`.html`。
 - 共用版型：`/notices_can/assets/style.css`、`app.js`。
 - 截圖資料：`SCREENSHOT_CHECKLIST.md`。
 
-本頁包含 Tool 連線、共用 BIN／metadata／log、Custom Transfer、CAN device App 更新、I2C 探索及 Misc Host App 更新。
+本站提供 Tool 連線、共用 BIN／metadata／log、Custom Transfer、CAN／串列 device App 更新、I2C 探索及 Misc Host App 更新。
 公開導覽使用功能名稱；量測版本與雜湊由交付紀錄提供。
 首頁 `ISP_MODE_NAV` 區分 Classical CAN（F13／F24）、CAN FD（F24）及 Custom Transfer 三種範例，僅提供操作跳轉。
+
+## 主題頁
+
+| 頁面 | 內容 |
+| --- | --- |
+| [下載與產物](downloads.html) | Tool、Host／Device 原始碼及適用的燒錄檔／更新 BIN |
+| [連線與操作](operation.html) | COM、Host 識別、畫面、接線與更新政策 |
+| [欄位與報告](status-and-reports.html) | 狀態、Metadata 判讀、更新確認、進度、取消與報告 |
+| [CAN／CAN FD 更新](can-update.html) | Classical CAN F13／F24、CAN FD F24 的 App 更新 |
+| [CAN 逐層導讀](can-protocol.html) | Tool、MCU CAN host 與 MCU CAN device 的流程對照 |
+| [串列 ISP 操作](serial-isp.html) | UART／Xmodem／I2C 與可調通訊設定 |
+| [Custom Transfer](custom-transfer.html) | F13／F24 Classical CAN 與 F24 CAN FD 的通訊測試 |
+| [Host 韌體](host-firmware.html) | Misc 更新、Host 工程與向量設定 |
+| [Device 工程入口](device-guides.html) | Boot／App、Metadata、IRQ 與移植的主題連結 |
+
+每個主題頁保留自己的目錄，頁首可返回指南入口，頁尾提供上一／下一主題。
+原首頁的章節網址由 `guide-map.json`／`guide-routes.js` 導向對應主題與錨點。
 
 ## 主題維護
 
@@ -22,8 +39,9 @@
 原始碼與交付檔的發佈前檢查、本機資料追蹤排除及重試方式，見
 [GitHub 維護操作](https://github.com/released/simple_renesas_isp_tool/blob/main/docs/GITHUB_PUBLISH_zh-TW.md)。
 
-| 本頁完整章節 | 原稿／同步腳本 |
+| 本站完整主題 | 原稿／同步腳本 |
 | --- | --- |
+| 四系列 UART／Xmodem／I2C 操作與 device 診斷 UART | ISP_UART_TOOL_GUIDE／sync_isp_uart_guide.ps1 |
 | CAN FD 操作／64-byte資料幀 | CAN_FD_UPDATE 的 FD_UPDATE／sync_can_fd.ps1 |
 | CAN FD Custom Transfer | CAN_FD_UPDATE 的 FD_TRANSFER／sync_can_fd.ps1 |
 | 下載與操作入口 | MULTIBUS_TOOL_GUIDE 的 PUBLIC_RESOURCES／sync_public_resources.ps1 |
@@ -44,6 +62,13 @@ F24 device 的更新報告與 UART counter 位於 `#f24-device-update-example`�
 頁面只使用遮蔽本機路徑的副本；圖片可點選開啟原尺寸。
 Custom Transfer 的四張公開圖位於 Tool `docs/images/custom_transfer`，由專用同步腳本核對文字與圖片 SHA-256。
 使用 `-WebRoot` 或 `FIRMWARE_WEB_ROOT` 指定網站 checkout 父目錄。
+
+Tool 的 `scripts/web_guide_layout.json` 定義同步區塊的目的頁，原稿及區塊內容維持單一來源。
+新增章節或穩定 anchor 後，維護對應頁面與配置，再執行
+`node scripts/split_web_guides.mjs <WebRoot> --refresh` 更新書籤路由。
+`--migrate` 僅用於首次移轉，不用於日常同步。
+既有 PDF 原稿與首頁章節網址維持有效；分頁本身不改變技術契約。
+分頁 renderer 位於共用 `notices_can/assets/app.js`，發佈時需與兩個指南一併同步。
 
 ## 預覽與檢查
 

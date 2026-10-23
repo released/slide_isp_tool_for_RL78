@@ -2,6 +2,13 @@ param([string]$PreviewBase = '', [string]$ToolRoot = '')
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path -Parent $PSScriptRoot
 $webRoot = Split-Path -Parent $projectRoot
+$guideMaps=@{}
+$guideReaderPages=@()
+foreach($folder in @('slide_isp_tool_for_RL78','slide_boot_loader_for_RL78')){
+    $map=Get-Content -LiteralPath (Join-Path $webRoot ($folder+'\guide-map.json')) -Raw -Encoding UTF8 | ConvertFrom-Json
+    $guideMaps[$folder]=$map
+    foreach($page in $map.pages.PSObject.Properties.Name){$guideReaderPages+=($folder+'\'+$page+'.md')}
+}
 $sources = @((Join-Path $projectRoot 'index.md'),
     (Join-Path $projectRoot 'SCREENSHOT_CHECKLIST.md'),
     (Join-Path $projectRoot 'index.html'),
@@ -10,6 +17,9 @@ $sources = @((Join-Path $projectRoot 'index.md'),
     (Join-Path $webRoot 'slide_boot_loader_for_RL78\basic_uart_i2c\index.html'),
     (Join-Path $webRoot 'released.github.io\README.md'),
     (Join-Path $webRoot 'released.github.io\README.html'))
+$sources+=@($guideReaderPages | ForEach-Object{Join-Path $webRoot $_})
+$sources+=@($guideReaderPages | ForEach-Object{Join-Path $webRoot ([IO.Path]::ChangeExtension($_,'html'))})
+$sources=@($sources | Select-Object -Unique)
 $checked = 0
 foreach ($source in $sources) {
     $text = Get-Content -LiteralPath $source -Raw -Encoding UTF8
@@ -30,8 +40,7 @@ foreach ($source in $sources) {
     }
 }
 Write-Host "PASS: $checked local image/page/resource references; Markdown fences balanced."
-$readerPages = @('slide_boot_loader_for_RL78\index.md',
-    'slide_boot_loader_for_RL78\basic_uart_i2c\index.md','slide_isp_tool_for_RL78\index.md')
+$readerPages = $guideReaderPages+@('slide_boot_loader_for_RL78\basic_uart_i2c\index.md')
 foreach ($page in $readerPages) {
     $pageText = [IO.File]::ReadAllText((Join-Path $webRoot $page))
     $prose = [regex]::Replace($pageText, '(?ms)^```[^\r\n]*\r?\n.*?^```[ \t]*\r?$', '')
@@ -47,10 +56,10 @@ if (-not $ispEntry.Success) { throw 'Missing linked RL78 ISP Tool navigation ent
 if ($ispEntry.Value -match '(\d+\.\d+\.\d+|Tool\d{4}|\u5de5\u7a0b\u7b2c\u4e00\u7248|19244|10963|301\u5340\u584a)') {
     throw 'Navigation must describe functions, not pin a release or benchmark.'
 }
-foreach ($page in @('slide_isp_tool_for_RL78\index.md', 'slide_boot_loader_for_RL78\index.md',
+foreach ($page in ($guideReaderPages+@(
         'slide_boot_loader_for_RL78\basic_uart_i2c\index.md',
         'slide_isp_tool_for_RL78\README.md', 'slide_boot_loader_for_RL78\README.md',
-        'released.github.io\README.md', 'released.github.io\README.html')) {
+        'released.github.io\README.md', 'released.github.io\README.html'))) {
     $pageText = Get-Content -LiteralPath (Join-Path $webRoot $page) -Raw -Encoding UTF8
     # ASCII escapes keep Windows PowerShell 5 source decoding unambiguous.
     $draftPattern = '(\u5c1a\u672a\u767c\u5e03|\u672a\u767c\u5e03|\u5c1a\u672a\u516c\u958b\u767c\u5e03|\u672c\u6a5f\u7a3f|\u672c\u6a5f\u7de8\u8f2f\u7a3f|\u672c\u6a5f\u88fd\u4f5c\u7a3f|\u5de5\u7a0b\u7b2c\u4e00\u7248)'
@@ -62,8 +71,10 @@ foreach ($page in @('slide_isp_tool_for_RL78\index.md', 'slide_boot_loader_for_R
     }
 }
 Write-Host 'PASS: linked evergreen navigation and no draft/release milestone labels.'
-$ispText = [IO.File]::ReadAllText((Join-Path $projectRoot 'index.md'))
-$bootText = [IO.File]::ReadAllText((Join-Path $webRoot 'slide_boot_loader_for_RL78\index.md'))
+$ispText = ($guideReaderPages | Where-Object { $_.StartsWith('slide_isp_tool_for_RL78\') } |
+    ForEach-Object { [IO.File]::ReadAllText((Join-Path $webRoot $_)) }) -join "`n"
+$bootText = ($guideReaderPages | Where-Object { $_.StartsWith('slide_boot_loader_for_RL78\') } |
+    ForEach-Object { [IO.File]::ReadAllText((Join-Path $webRoot $_)) }) -join "`n"
 $resourcePattern = '(?s)<!-- PUBLIC_RESOURCES_BEGIN -->.*?<!-- PUBLIC_RESOURCES_END -->'
 $ispBlocks = [regex]::Matches($ispText, $resourcePattern)
 $bootBlocks = [regex]::Matches($bootText, $resourcePattern)
@@ -73,7 +84,7 @@ if ($ispBlocks.Count -ne 1 -or $bootBlocks.Count -ne 1 -or
     throw 'Expected full downloads on ISP and a navigation link on Bootloader.'
 }
 foreach ($anchor in @('tool-bridge-flow','tool-operation','custom-transfer','host-bridge-firmware','f13-device-update','mcu-can-device')) {
-    if ([regex]::Matches($ispText, '<a id="' + $anchor + '"></a>').Count -ne 1) {
+    if ($anchor -ne 'article_top' -and [regex]::Matches($ispText, '<a id="' + $anchor + '"></a>').Count -ne 1) {
         throw "Missing/duplicate public workflow anchor: $anchor"
     }
 }
@@ -88,7 +99,7 @@ foreach ($text in (@($pages.Values)+@($navigation,$homeHtml))) {
     foreach ($match in [regex]::Matches($text,'https://released\.github\.io/(slide_(?:isp_tool|boot_loader)_for_RL78)/#([A-Za-z0-9_-]+)')) {
         $site=$match.Groups[1].Value
         $anchor=$match.Groups[2].Value
-        if ([regex]::Matches($pages[$site],'<a id="'+[regex]::Escape($anchor)+'"></a>').Count -ne 1) {
+        if ($anchor -ne 'article_top' -and [regex]::Matches($pages[$site],'<a id="'+[regex]::Escape($anchor)+'"></a>').Count -ne 1) {
             throw "Broken/duplicate cross-page anchor: $site / $anchor"
         }
     }
@@ -204,13 +215,15 @@ if ($walkBlocks.Count -ne 1 -or
 Write-Host 'PASS: cross-layer CAN tutorial with15 tables/9 Mermaid diagrams and linked navigation.'
 if ($ToolRoot) {
     $identity = Get-Content -LiteralPath (Join-Path $ToolRoot 'src\build_info.generated.h') -Raw -Encoding UTF8
-    $guide = Get-Content -LiteralPath (Join-Path $projectRoot 'index.md') -Raw -Encoding UTF8
+    $guide = $ispText
     if ($identity -notmatch 'FIRMWARE_UPGRADE_TOOL_VERSION' -or $guide -notmatch 'FirmwareUpgradeTool') {
         throw 'Tool/web product identity missing.'
     }
     Write-Host 'PASS: Tool/web product identity; public guide intentionally has no build-version pin.'
     & (Join-Path $ToolRoot 'scripts\sync_public_content_guidelines.ps1') -WebRoot $webRoot -CheckOnly
     & (Join-Path $ToolRoot 'scripts\verify_public_content.ps1') -WebRoot $webRoot
+    & node (Join-Path $ToolRoot 'scripts\verify_web_guide_layout.mjs') $webRoot
+    if($LASTEXITCODE){throw 'Guide chapter/legacy-route checks failed.'}
 }
 if ($PreviewBase) {
     $routes = @('/slide_isp_tool_for_RL78/', '/slide_isp_tool_for_RL78/index.md',
@@ -219,6 +232,11 @@ if ($PreviewBase) {
         '/slide_boot_loader_for_RL78/', '/slide_boot_loader_for_RL78/basic_uart_i2c/',
         '/slide_boot_loader_for_RL78/basic_uart_i2c/index.md',
         '/released.github.io/README.html', '/notices_can/assets/style.css', '/notices_can/assets/app.js')
+    foreach($reader in $guideReaderPages){
+        $routes+=('/'+$reader.Replace('\','/'))
+        $routes+=('/'+[IO.Path]::ChangeExtension($reader,'html').Replace('\','/'))
+    }
+    $routes=@($routes | Select-Object -Unique)
     foreach ($route in $routes) {
         $response = Invoke-WebRequest -UseBasicParsing ($PreviewBase.TrimEnd('/') + $route)
         if ($response.StatusCode -ne 200) { throw "HTTP failure: $route" }
